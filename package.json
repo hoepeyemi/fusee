@@ -25,7 +25,8 @@
     "@prisma/client": "^5.7.1",
     "pg": "^8.11.3",
     "swagger-ui-express": "^5.0.0",
-    "swagger-jsdoc": "^6.2.8"
+    "swagger-jsdoc": "^6.2.8",
+    "express-validator": "^7.0.1"
   },
   "devDependencies": {
     "@types/express": "^5.0.3",

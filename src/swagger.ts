@@ -8,7 +8,7 @@ const options = {
     info: {
       title: 'Fusee Backend API',
       version: '1.0.0',
-      description: 'User Registration API with Solana Wallet Integration',
+      description: 'Secure User Registration API with Solana Wallet Integration',
     },
     servers: [
       {
@@ -17,6 +17,14 @@ const options = {
       },
     ],
     components: {
+      securitySchemes: {
+        csrf: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-CSRF-Token',
+          description: 'CSRF token for protection against cross-site request forgery'
+        }
+      },
       schemas: {
         User: {
           type: 'object',

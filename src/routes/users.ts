@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { validateUserInput } from '../utils/validation';
+import { validateUser, handleValidationErrors } from '../middleware/security';
 
 const router = Router();
 
@@ -10,6 +10,8 @@ const router = Router();
  *   post:
  *     summary: Create a new user with Solana wallet
  *     tags: [Users]
+ *     security:
+ *       - csrf: []
  *     requestBody:
  *       required: true
  *       content:
@@ -71,24 +73,9 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', validateUser, handleValidationErrors, async (req: Request, res: Response) => {
   try {
     const { email, fullName, phoneNumber, solanaWallet } = req.body;
-    
-    // Validate input
-    const validation = validateUserInput({
-      email,
-      fullName,
-      phoneNumber,
-      solanaWallet
-    });
-
-    if (!validation.isValid) {
-      return res.status(400).json({
-        message: 'Validation failed',
-        errors: validation.errors
-      });
-    }
 
     // Check if email or wallet already exists
     const existingUser = await prisma.user.findFirst({
@@ -133,6 +120,8 @@ router.post('/', async (req: Request, res: Response) => {
  *   get:
  *     summary: Get user details by ID
  *     tags: [Users]
+ *     security:
+ *       - csrf: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -173,9 +162,9 @@ router.get('/:id', async (req: Request, res: Response) => {
     
     // Validate ID is a number
     const userId = parseInt(id);
-    if (isNaN(userId)) {
+    if (isNaN(userId) || userId < 1) {
       return res.status(400).json({
-        message: 'Invalid user ID. Must be a number.',
+        message: 'Invalid user ID. Must be a positive integer.',
         error: 'Bad Request'
       });
     }

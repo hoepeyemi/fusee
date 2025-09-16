@@ -3,6 +3,14 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { setupSwagger } from './swagger';
 import userRoutes from './routes/users';
+import { 
+  helmetMiddleware, 
+  rateLimiter, 
+  speedLimiter, 
+  xssProtection, 
+  securityHeaders 
+} from './middleware/security';
+import { generateCSRFToken, verifyCSRFToken, getCSRFToken } from './middleware/csrf';
 
 // Load environment variables
 dotenv.config();
@@ -15,16 +23,38 @@ const PORT = process.env.PORT || 3000;
 
 console.log('⚙️  Configuring middleware...');
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Security middleware (order matters!)
+app.use(helmetMiddleware);
+app.use(securityHeaders);
+app.use(rateLimiter);
+app.use(speedLimiter);
+
+// CORS configuration
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token']
+}));
+
+// Body parsing middleware
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// XSS protection
+app.use(xssProtection);
+
+// CSRF protection
+app.use(generateCSRFToken);
 
 // Setup Swagger documentation
 setupSwagger(app);
 
-// Routes
-app.use('/api/users', userRoutes);
+// CSRF token endpoint
+app.get('/api/csrf-token', getCSRFToken);
+
+// Routes with CSRF protection
+app.use('/api/users', verifyCSRFToken, userRoutes);
 
 /**
  * @swagger
