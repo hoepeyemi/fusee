@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { validateTransfer, handleValidationErrors } from '../middleware/security';
+import DedicatedWalletService from '../services/dedicatedWallet';
 
 const router = Router();
 
@@ -101,6 +102,16 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
       });
     }
 
+    // Check if sender has sufficient balance in vault
+    if (Number(sender.balance) < parseFloat(amount)) {
+      return res.status(400).json({
+        message: 'Insufficient balance in vault',
+        error: 'Bad Request',
+        currentBalance: Number(sender.balance),
+        requestedAmount: parseFloat(amount)
+      });
+    }
+
     // Create transfer record
     const transfer = await prisma.transfer.create({
       data: {
@@ -117,7 +128,8 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
             id: true,
             fullName: true,
             firstName: true,
-            solanaWallet: true
+            solanaWallet: true,
+            balance: true
           }
         },
         receiver: {
@@ -125,15 +137,19 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
             id: true,
             fullName: true,
             firstName: true,
-            solanaWallet: true
+            solanaWallet: true,
+            balance: true
           }
         }
       }
     });
 
-    // In a real implementation, you would integrate with a blockchain service here
-    // For now, we'll simulate a successful transfer
-    const simulatedTransactionHash = `0x${Math.random().toString(16).substr(2, 64)}`;
+    // Get dedicated wallet for transaction logging
+    const dedicatedWallet = DedicatedWalletService.getInstance();
+    const walletAddress = dedicatedWallet.getWalletAddress();
+    
+    // Simulate successful transfer through dedicated wallet
+    const simulatedTransactionHash = `DEDICATED_TRANSFER_${Date.now()}_${Math.random().toString(16).substr(2, 8)}`;
     
     // Update transfer with simulated transaction hash and mark as completed
     const completedTransfer = await prisma.transfer.update({
@@ -148,7 +164,8 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
             id: true,
             fullName: true,
             firstName: true,
-            solanaWallet: true
+            solanaWallet: true,
+            balance: true
           }
         },
         receiver: {
@@ -156,15 +173,37 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
             id: true,
             fullName: true,
             firstName: true,
-            solanaWallet: true
+            solanaWallet: true,
+            balance: true
           }
         }
       }
     });
 
+    // Update sender's balance (deduct from vault)
+    await prisma.user.update({
+      where: { id: senderId },
+      data: {
+        balance: {
+          decrement: parseFloat(amount)
+        }
+      }
+    });
+
+    // Update receiver's balance (add to vault)
+    await prisma.user.update({
+      where: { id: receiver.id },
+      data: {
+        balance: {
+          increment: parseFloat(amount)
+        }
+      }
+    });
+
     res.status(201).json({
-      message: 'Transfer completed successfully',
-      transfer: completedTransfer
+      message: 'Transfer completed successfully through dedicated wallet',
+      transfer: completedTransfer,
+      dedicatedWalletAddress: walletAddress
     });
   } catch (error) {
     console.error('Error creating transfer:', error);

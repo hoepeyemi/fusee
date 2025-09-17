@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import { setupSwagger } from './swagger';
 import userRoutes from './routes/users';
 import transferRoutes from './routes/transfers';
+import vaultRoutes from './routes/vault';
 import { 
   helmetMiddleware, 
   rateLimiter, 
@@ -57,6 +58,7 @@ app.get('/api/csrf-token', getCSRFToken);
 // Routes with CSRF protection
 app.use('/api/users', verifyCSRFToken, userRoutes);
 app.use('/api/transfers', verifyCSRFToken, transferRoutes);
+app.use('/api/vault', verifyCSRFToken, vaultRoutes);
 
 /**
  * @swagger
@@ -95,7 +97,12 @@ app.get('/', (req: Request, res: Response) => {
           sendTransfer: 'POST /api/transfers',
           getSentTransfers: 'GET /api/transfers/sender/{senderId}',
           getReceivedTransfers: 'GET /api/transfers/receiver/{receiverId}',
-          getWallets: 'GET /api/transfers/wallets'
+          getWallets: 'GET /api/transfers/wallets',
+          getUserBalance: 'GET /api/vault/balance/{userId}',
+          deposit: 'POST /api/vault/deposit',
+          withdraw: 'POST /api/vault/withdraw',
+          vaultStatus: 'GET /api/vault/status',
+          getWalletAddress: 'GET /api/vault/wallet/address'
         }
   });
 });

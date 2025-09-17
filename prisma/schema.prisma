@@ -17,12 +17,15 @@ model User {
   firstName       String?  // Extract first name for wallet lookup
   phoneNumber     String?
   solanaWallet    String   @unique
+  balance         Decimal  @default(0) @db.Decimal(18, 8) // User's vault balance
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   // Relations
   sentTransfers     Transfer[] @relation("SenderTransfers")
   receivedTransfers Transfer[] @relation("ReceiverTransfers")
+  deposits          Deposit[]  @relation("UserDeposits")
+  withdrawals       Withdrawal[] @relation("UserWithdrawals")
 
   @@map("users")
 }
@@ -57,7 +60,76 @@ model Transfer {
   @@map("transfers")
 }
 
+model Vault {
+  id            Int      @id @default(autoincrement())
+  address       String   @unique
+  name          String   @default("Main Vault")
+  totalBalance  Decimal  @default(0) @db.Decimal(18, 8)
+  currency      String   @default("SOL")
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  deposits      Deposit[]    @relation("VaultDeposits")
+  withdrawals   Withdrawal[] @relation("VaultWithdrawals")
+
+  @@map("vaults")
+}
+
+model Deposit {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  vaultId       Int
+  amount        Decimal  @db.Decimal(18, 8)
+  currency      String   @default("SOL")
+  status        DepositStatus @default(PENDING)
+  transactionHash String? // Blockchain transaction hash
+  notes         String?  // Optional deposit notes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User     @relation("UserDeposits", fields: [userId], references: [id])
+  vault         Vault    @relation("VaultDeposits", fields: [vaultId], references: [id])
+
+  @@map("deposits")
+}
+
+model Withdrawal {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  vaultId       Int
+  amount        Decimal  @db.Decimal(18, 8)
+  currency      String   @default("SOL")
+  status        WithdrawalStatus @default(PENDING)
+  transactionHash String? // Blockchain transaction hash
+  notes         String?  // Optional withdrawal notes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User     @relation("UserWithdrawals", fields: [userId], references: [id])
+  vault         Vault    @relation("VaultWithdrawals", fields: [vaultId], references: [id])
+
+  @@map("withdrawals")
+}
+
 enum TransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DepositStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WithdrawalStatus {
   PENDING
   COMPLETED
   FAILED

@@ -115,6 +115,144 @@ const options = {
             },
           },
         },
+        Vault: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Vault ID',
+            },
+            address: {
+              type: 'string',
+              description: 'Vault wallet address',
+            },
+            name: {
+              type: 'string',
+              description: 'Vault name',
+            },
+            totalBalance: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Total vault balance',
+            },
+            currency: {
+              type: 'string',
+              description: 'Vault currency',
+            },
+            isActive: {
+              type: 'boolean',
+              description: 'Whether vault is active',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Vault creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Vault last update date',
+            },
+          },
+        },
+        Deposit: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Deposit ID',
+            },
+            userId: {
+              type: 'integer',
+              description: 'User ID',
+            },
+            vaultId: {
+              type: 'integer',
+              description: 'Vault ID',
+            },
+            amount: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Deposit amount',
+            },
+            currency: {
+              type: 'string',
+              description: 'Currency type',
+            },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+              description: 'Deposit status',
+            },
+            transactionHash: {
+              type: 'string',
+              description: 'Blockchain transaction hash',
+            },
+            notes: {
+              type: 'string',
+              description: 'Deposit notes',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Deposit creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Deposit last update date',
+            },
+          },
+        },
+        Withdrawal: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Withdrawal ID',
+            },
+            userId: {
+              type: 'integer',
+              description: 'User ID',
+            },
+            vaultId: {
+              type: 'integer',
+              description: 'Vault ID',
+            },
+            amount: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Withdrawal amount',
+            },
+            currency: {
+              type: 'string',
+              description: 'Currency type',
+            },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+              description: 'Withdrawal status',
+            },
+            transactionHash: {
+              type: 'string',
+              description: 'Blockchain transaction hash',
+            },
+            notes: {
+              type: 'string',
+              description: 'Withdrawal notes',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Withdrawal creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Withdrawal last update date',
+            },
+          },
+        },
         User: {
           type: 'object',
           properties: {

@@ -229,6 +229,92 @@ export const validateTransfer = (req: Request, res: Response, next: NextFunction
   next();
 };
 
+// Deposit validation
+export const validateDeposit = (req: Request, res: Response, next: NextFunction) => {
+  const errors: string[] = [];
+  
+  // Validate user ID
+  if (!req.body.userId) {
+    errors.push('User ID is required');
+  } else if (!Number.isInteger(Number(req.body.userId)) || Number(req.body.userId) < 1) {
+    errors.push('User ID must be a positive integer');
+  }
+  
+  // Validate amount
+  if (!req.body.amount) {
+    errors.push('Amount is required');
+  } else {
+    const amount = parseFloat(req.body.amount);
+    if (isNaN(amount) || amount <= 0) {
+      errors.push('Amount must be a positive number');
+    } else if (amount > 1000000) {
+      errors.push('Amount cannot exceed 1,000,000');
+    }
+  }
+  
+  // Validate currency (optional)
+  if (req.body.currency && typeof req.body.currency !== 'string') {
+    errors.push('Currency must be a string');
+  }
+  
+  // Validate notes (optional)
+  if (req.body.notes && typeof req.body.notes !== 'string') {
+    errors.push('Notes must be a string');
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: errors
+    });
+  }
+  
+  next();
+};
+
+// Withdrawal validation
+export const validateWithdrawal = (req: Request, res: Response, next: NextFunction) => {
+  const errors: string[] = [];
+  
+  // Validate user ID
+  if (!req.body.userId) {
+    errors.push('User ID is required');
+  } else if (!Number.isInteger(Number(req.body.userId)) || Number(req.body.userId) < 1) {
+    errors.push('User ID must be a positive integer');
+  }
+  
+  // Validate amount
+  if (!req.body.amount) {
+    errors.push('Amount is required');
+  } else {
+    const amount = parseFloat(req.body.amount);
+    if (isNaN(amount) || amount <= 0) {
+      errors.push('Amount must be a positive number');
+    } else if (amount > 1000000) {
+      errors.push('Amount cannot exceed 1,000,000');
+    }
+  }
+  
+  // Validate currency (optional)
+  if (req.body.currency && typeof req.body.currency !== 'string') {
+    errors.push('Currency must be a string');
+  }
+  
+  // Validate notes (optional)
+  if (req.body.notes && typeof req.body.notes !== 'string') {
+    errors.push('Notes must be a string');
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: errors
+    });
+  }
+  
+  next();
+};
+
 // Security headers middleware
 export const securityHeaders = (req: Request, res: Response, next: NextFunction) => {
   // Remove X-Powered-By header
