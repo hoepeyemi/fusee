@@ -14,10 +14,52 @@ model User {
   id              Int      @id @default(autoincrement())
   email           String   @unique
   fullName        String
+  firstName       String?  // Extract first name for wallet lookup
   phoneNumber     String?
   solanaWallet    String   @unique
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  // Relations
+  sentTransfers     Transfer[] @relation("SenderTransfers")
+  receivedTransfers Transfer[] @relation("ReceiverTransfers")
+
   @@map("users")
+}
+
+model Wallet {
+  id          Int      @id @default(autoincrement())
+  firstName   String   @unique
+  address     String   @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("wallets")
+}
+
+model Transfer {
+  id            Int      @id @default(autoincrement())
+  senderId      Int
+  receiverId    Int
+  amount        Decimal  @db.Decimal(18, 8) // Support up to 18 digits with 8 decimal places
+  currency      String   @default("SOL") // Default to Solana
+  status        TransferStatus @default(PENDING)
+  transactionHash String? // Blockchain transaction hash
+  notes         String?  // Optional transfer notes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  sender        User     @relation("SenderTransfers", fields: [senderId], references: [id])
+  receiver      User     @relation("ReceiverTransfers", fields: [receiverId], references: [id])
+
+  @@map("transfers")
+}
+
+enum TransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
 }

@@ -15,6 +15,8 @@ A secure Express.js backend with Prisma, PostgreSQL, and comprehensive security 
 - 🌐 Secure CORS Configuration
 - 🏥 Health check endpoint
 - 💰 Solana Wallet Integration
+- 🔄 Cryptocurrency Transfer System
+- 👤 First Name to Wallet Address Mapping
 
 ## Prerequisites
 
@@ -105,6 +107,12 @@ This API includes enterprise-grade security features:
 - `POST /api/users` - Create a new user with Solana wallet
 - `GET /api/users/:id` - Get user details by ID
 
+#### Transfers
+- `POST /api/transfers` - Send cryptocurrency to another user by first name
+- `GET /api/transfers/sender/:senderId` - Get all transfers sent by a user
+- `GET /api/transfers/receiver/:receiverId` - Get all transfers received by a user
+- `GET /api/transfers/wallets` - Get all active wallet addresses by first name
+
 #### Security
 - `GET /api/csrf-token` - Get CSRF token for frontend
 
@@ -143,18 +151,76 @@ This API includes enterprise-grade security features:
      -H "X-CSRF-Token: YOUR_CSRF_TOKEN"
    ```
 
+### Sending Cryptocurrency (by First Name)
+
+1. **Send Transfer:**
+   ```bash
+   curl -X POST http://localhost:3000/api/transfers \
+     -H "Content-Type: application/json" \
+     -H "X-CSRF-Token: YOUR_CSRF_TOKEN" \
+     -d '{
+       "senderId": 1,
+       "receiverFirstName": "Jane",
+       "amount": 0.5,
+       "currency": "SOL",
+       "notes": "Payment for services"
+     }'
+   ```
+
+2. **Get All Wallets:**
+   ```bash
+   curl -X GET http://localhost:3000/api/transfers/wallets \
+     -H "X-CSRF-Token: YOUR_CSRF_TOKEN"
+   ```
+
+3. **Get User's Transfer History:**
+   ```bash
+   # Sent transfers
+   curl -X GET http://localhost:3000/api/transfers/sender/1 \
+     -H "X-CSRF-Token: YOUR_CSRF_TOKEN"
+   
+   # Received transfers
+   curl -X GET http://localhost:3000/api/transfers/receiver/2 \
+     -H "X-CSRF-Token: YOUR_CSRF_TOKEN"
+   ```
+
 ## Database Schema
 
-The application uses a simplified schema focused on user registration with Solana wallet integration:
+The application uses a comprehensive schema for user registration and cryptocurrency transfers:
 
 ### User Model
 - `id` (Int, Primary Key, Auto-increment)
 - `email` (String, Unique, Required) - Validated email format
 - `fullName` (String, Required) - User's full name (2-100 characters)
+- `firstName` (String, Required) - Extracted first name for wallet lookup
 - `phoneNumber` (String, Optional) - Mobile phone number with validation
 - `solanaWallet` (String, Unique, Required) - Solana wallet address (32-44 chars, base58)
 - `createdAt` (DateTime, Auto-generated)
 - `updatedAt` (DateTime, Auto-updated)
+- `sentTransfers` (Relation to Transfer[]) - Transfers sent by this user
+- `receivedTransfers` (Relation to Transfer[]) - Transfers received by this user
+
+### Wallet Model
+- `id` (Int, Primary Key, Auto-increment)
+- `firstName` (String, Unique, Required) - First name for wallet lookup
+- `address` (String, Unique, Required) - Associated wallet address
+- `isActive` (Boolean, Default: true) - Whether wallet is active
+- `createdAt` (DateTime, Auto-generated)
+- `updatedAt` (DateTime, Auto-updated)
+
+### Transfer Model
+- `id` (Int, Primary Key, Auto-increment)
+- `senderId` (Int, Foreign Key) - Sender user ID
+- `receiverId` (Int, Foreign Key) - Receiver user ID
+- `amount` (Decimal, Required) - Transfer amount (18 digits, 8 decimals)
+- `currency` (String, Default: "SOL") - Currency type
+- `status` (Enum, Default: PENDING) - Transfer status (PENDING, COMPLETED, FAILED, CANCELLED)
+- `transactionHash` (String, Optional) - Blockchain transaction hash
+- `notes` (String, Optional) - Transfer notes
+- `createdAt` (DateTime, Auto-generated)
+- `updatedAt` (DateTime, Auto-updated)
+- `sender` (Relation to User) - Sender user details
+- `receiver` (Relation to User) - Receiver user details
 
 ## Input Validation Rules
 
@@ -178,6 +244,13 @@ The application uses a simplified schema focused on user registration with Solan
 - 32-44 characters length
 - Must be valid base58 encoded string
 - Unique constraint enforced
+
+### Transfer Validation
+- Sender ID: Required, must be positive integer
+- Receiver First Name: Required, non-empty string
+- Amount: Required, positive number, max 1,000,000
+- Currency: Optional, must be string (default: SOL)
+- Notes: Optional, must be string
 
 ## Error Handling
 

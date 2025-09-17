@@ -179,6 +179,56 @@ export const validateUser = (req: Request, res: Response, next: NextFunction) =>
   handleValidationErrors(req, res, next);
 };
 
+// Transfer validation
+export const validateTransfer = (req: Request, res: Response, next: NextFunction) => {
+  const errors: string[] = [];
+  
+  // Validate sender ID
+  if (!req.body.senderId) {
+    errors.push('Sender ID is required');
+  } else if (!Number.isInteger(Number(req.body.senderId)) || Number(req.body.senderId) < 1) {
+    errors.push('Sender ID must be a positive integer');
+  }
+  
+  // Validate receiver first name
+  if (!req.body.receiverFirstName) {
+    errors.push('Receiver first name is required');
+  } else if (typeof req.body.receiverFirstName !== 'string' || req.body.receiverFirstName.trim().length < 1) {
+    errors.push('Receiver first name must be a non-empty string');
+  }
+  
+  // Validate amount
+  if (!req.body.amount) {
+    errors.push('Amount is required');
+  } else {
+    const amount = parseFloat(req.body.amount);
+    if (isNaN(amount) || amount <= 0) {
+      errors.push('Amount must be a positive number');
+    } else if (amount > 1000000) {
+      errors.push('Amount cannot exceed 1,000,000');
+    }
+  }
+  
+  // Validate currency (optional)
+  if (req.body.currency && typeof req.body.currency !== 'string') {
+    errors.push('Currency must be a string');
+  }
+  
+  // Validate notes (optional)
+  if (req.body.notes && typeof req.body.notes !== 'string') {
+    errors.push('Notes must be a string');
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: errors
+    });
+  }
+  
+  next();
+};
+
 // Security headers middleware
 export const securityHeaders = (req: Request, res: Response, next: NextFunction) => {
   // Remove X-Powered-By header

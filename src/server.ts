@@ -3,6 +3,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import { setupSwagger } from './swagger';
 import userRoutes from './routes/users';
+import transferRoutes from './routes/transfers';
 import { 
   helmetMiddleware, 
   rateLimiter, 
@@ -55,6 +56,7 @@ app.get('/api/csrf-token', getCSRFToken);
 
 // Routes with CSRF protection
 app.use('/api/users', verifyCSRFToken, userRoutes);
+app.use('/api/transfers', verifyCSRFToken, transferRoutes);
 
 /**
  * @swagger
@@ -87,9 +89,14 @@ app.get('/', (req: Request, res: Response) => {
   res.json({
     message: 'Fusee Backend API - User Registration Service',
     version: '1.0.0',
-    endpoints: {
-      createUser: 'POST /api/users'
-    }
+        endpoints: {
+          createUser: 'POST /api/users',
+          getUser: 'GET /api/users/{id}',
+          sendTransfer: 'POST /api/transfers',
+          getSentTransfers: 'GET /api/transfers/sender/{senderId}',
+          getReceivedTransfers: 'GET /api/transfers/receiver/{receiverId}',
+          getWallets: 'GET /api/transfers/wallets'
+        }
   });
 });
 

@@ -95,13 +95,31 @@ router.post('/', validateUser, handleValidationErrors, async (req: Request, res:
       });
     }
 
+    // Extract first name from full name
+    const firstName = fullName.split(' ')[0];
+
     const user = await prisma.user.create({
       data: {
         email,
         fullName: fullName as any,
+        firstName: firstName as any,
         phoneNumber,
         solanaWallet: solanaWallet as any,
       },
+    });
+
+    // Create or update wallet mapping
+    await prisma.wallet.upsert({
+      where: { firstName: firstName as any },
+      update: { 
+        address: solanaWallet as any,
+        isActive: true 
+      },
+      create: {
+        firstName: firstName as any,
+        address: solanaWallet as any,
+        isActive: true
+      }
     });
 
     res.status(201).json(user);
