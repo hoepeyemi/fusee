@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma';
 import dotenv from 'dotenv';
 
-// Load environment variables from project root
+// Load environment variables from project roo
 dotenv.config({ path: '.env' });
 
 export class DedicatedWalletService {
