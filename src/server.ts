@@ -17,7 +17,7 @@ import {
 import { generateCSRFToken, verifyCSRFToken, getCSRFToken } from './middleware/csrf';
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: '.env' });
 
 console.log('🚀 Starting server...');
 console.log('📁 Environment:', process.env.NODE_ENV || 'development');
