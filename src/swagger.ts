@@ -12,6 +12,10 @@ const options = {
     },
     servers: [
       {
+        url: 'https://fusee.onrender.com',
+        description: 'Production server',
+      },
+      {
         url: `http://localhost:${process.env.PORT || 3000}`,
         description: 'Development server',
       },
