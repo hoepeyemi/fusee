@@ -6,6 +6,7 @@ import userRoutes from './routes/users';
 import transferRoutes from './routes/transfers';
 import vaultRoutes from './routes/vault';
 import walletTransferRoutes from './routes/walletTransfers';
+import externalTransferRoutes from './routes/externalTransfers';
 import { 
   helmetMiddleware, 
   rateLimiter, 
@@ -61,6 +62,7 @@ app.use('/api/users', verifyCSRFToken, userRoutes);
 app.use('/api/transfers', verifyCSRFToken, transferRoutes);
 app.use('/api/vault', verifyCSRFToken, vaultRoutes);
 app.use('/api/wallet-transfers', verifyCSRFToken, walletTransferRoutes);
+app.use('/api/external-transfers', verifyCSRFToken, externalTransferRoutes);
 
 /**
  * @swagger
@@ -110,7 +112,12 @@ app.get('/', (req: Request, res: Response) => {
           walletTransfer: 'POST /api/wallet-transfers',
           getWalletTransfer: 'GET /api/wallet-transfers/{id}',
           getWalletTransfers: 'GET /api/wallet-transfers/wallet/{address}',
-          walletTransferStats: 'GET /api/wallet-transfers/statistics'
+          walletTransferStats: 'GET /api/wallet-transfers/statistics',
+          externalTransfer: 'POST /api/external-transfers',
+          getExternalTransfer: 'GET /api/external-transfers/{id}',
+          getExternalTransfersByUser: 'GET /api/external-transfers/user/{userId}',
+          getExternalTransfersByWallet: 'GET /api/external-transfers/external-wallet/{address}',
+          externalTransferStats: 'GET /api/external-transfers/statistics'
         }
   });
 });

@@ -430,6 +430,130 @@ const options = {
                 },
               },
             },
+            ExternalTransfer: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'External transfer ID',
+                },
+                userId: {
+                  type: 'integer',
+                  description: 'User ID making the transfer',
+                },
+                fromWallet: {
+                  type: 'string',
+                  description: 'User wallet address',
+                },
+                toExternalWallet: {
+                  type: 'string',
+                  description: 'External wallet address',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Transfer amount',
+                },
+                fee: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Transfer fee (0.001%)',
+                },
+                netAmount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Amount after fee deduction',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+                  description: 'Transfer status',
+                },
+                transactionHash: {
+                  type: 'string',
+                  description: 'Blockchain transaction hash',
+                },
+                feeWalletAddress: {
+                  type: 'string',
+                  description: 'Address where fee was sent',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Transfer notes',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Transfer creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Transfer last update date',
+                },
+                user: {
+                  type: 'object',
+                  description: 'User details',
+                },
+                fees: {
+                  type: 'array',
+                  items: {
+                    $ref: '#/components/schemas/ExternalFee'
+                  },
+                  description: 'Associated fee records',
+                },
+              },
+            },
+            ExternalFee: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'External fee ID',
+                },
+                externalTransferId: {
+                  type: 'integer',
+                  description: 'External transfer ID',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Fee amount',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                },
+                feeRate: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Fee rate (0.001% = 0.00001)',
+                },
+                feeWalletAddress: {
+                  type: 'string',
+                  description: 'Address where fee was sent',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['COLLECTED', 'REFUNDED', 'PENDING'],
+                  description: 'Fee status',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Fee creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Fee last update date',
+                },
+              },
+            },
         User: {
           type: 'object',
           properties: {

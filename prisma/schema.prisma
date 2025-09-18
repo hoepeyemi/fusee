@@ -26,6 +26,7 @@ model User {
   receivedTransfers Transfer[] @relation("ReceiverTransfers")
   deposits          Deposit[]  @relation("UserDeposits")
   withdrawals       Withdrawal[] @relation("UserWithdrawals")
+  externalTransfers ExternalTransfer[] @relation("UserExternalTransfers")
 
   @@map("users")
 }
@@ -176,6 +177,46 @@ model WalletFee {
   @@map("wallet_fees")
 }
 
+model ExternalTransfer {
+  id            Int      @id @default(autoincrement())
+  userId        Int      // User making the transfer
+  fromWallet    String   // User's wallet address
+  toExternalWallet String // External wallet address (not in database)
+  amount        Decimal  @db.Decimal(18, 8) // Transfer amount
+  fee           Decimal  @db.Decimal(18, 8) // Fee amount (0.001%)
+  netAmount     Decimal  @db.Decimal(18, 8) // Amount after fee deduction
+  currency      String   @default("SOL")
+  status        ExternalTransferStatus @default(PENDING)
+  transactionHash String? // Blockchain transaction hash
+  feeWalletAddress String // Address where fee was sent
+  notes         String?  // Optional transfer notes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  user          User     @relation("UserExternalTransfers", fields: [userId], references: [id])
+  fees          ExternalFee[] @relation("ExternalTransferFees")
+
+  @@map("external_transfers")
+}
+
+model ExternalFee {
+  id            Int      @id @default(autoincrement())
+  externalTransferId Int
+  amount        Decimal  @db.Decimal(18, 8) // Fee amount (0.001% of transfer)
+  currency      String   @default("SOL")
+  feeRate       Decimal  @db.Decimal(8, 6) // Fee rate (0.001% = 0.00001)
+  feeWalletAddress String // Address where fee was sent
+  status        ExternalFeeStatus @default(COLLECTED)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  externalTransfer ExternalTransfer @relation("ExternalTransferFees", fields: [externalTransferId], references: [id])
+
+  @@map("external_fees")
+}
+
 enum TransferStatus {
   PENDING
   COMPLETED
@@ -211,6 +252,19 @@ enum WalletTransferStatus {
 }
 
 enum WalletFeeStatus {
+  COLLECTED
+  REFUNDED
+  PENDING
+}
+
+enum ExternalTransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ExternalFeeStatus {
   COLLECTED
   REFUNDED
   PENDING
