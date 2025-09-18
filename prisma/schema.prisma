@@ -217,6 +217,90 @@ model ExternalFee {
   @@map("external_fees")
 }
 
+model Multisig {
+  id            Int      @id @default(autoincrement())
+  multisigPda   String   @unique // The multisig PDA address
+  createKey     String   @unique // The create key used to derive the multisig
+  name          String   @default("Main Multisig")
+  threshold     Int      // Number of approvals required
+  timeLock      Int      @default(0) // Time lock in seconds
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  members       MultisigMember[] @relation("MultisigMembers")
+  transactions  MultisigTransaction[] @relation("MultisigTransactions")
+
+  @@map("multisigs")
+}
+
+model MultisigMember {
+  id            Int      @id @default(autoincrement())
+  multisigId    Int
+  publicKey     String   @unique // Member's public key
+  permissions   String   // JSON string of permissions (Proposer, Voter, Executor)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  multisig      Multisig @relation("MultisigMembers", fields: [multisigId], references: [id])
+  approvals     MultisigApproval[] @relation("MemberApprovals")
+
+  @@map("multisig_members")
+}
+
+model MultisigTransaction {
+  id            Int      @id @default(autoincrement())
+  multisigId    Int
+  transactionIndex BigInt // Transaction index from the multisig
+  fromWallet    String   // Source wallet (vault, fee wallet, or dedicated wallet)
+  toWallet      String   // Destination wallet
+  amount        Decimal  @db.Decimal(18, 8) // Transfer amount
+  currency      String   @default("SOL")
+  status        MultisigTransactionStatus @default(PENDING)
+  transactionHash String? // Blockchain transaction hash
+  memo          String?  // Transaction memo
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  multisig      Multisig @relation("MultisigTransactions", fields: [multisigId], references: [id])
+  proposals     MultisigProposal[] @relation("TransactionProposals")
+  approvals     MultisigApproval[] @relation("TransactionApprovals")
+
+  @@map("multisig_transactions")
+}
+
+model MultisigProposal {
+  id            Int      @id @default(autoincrement())
+  multisigTransactionId Int
+  proposerKey   String   // Public key of the proposer
+  status        MultisigProposalStatus @default(PENDING)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  transaction   MultisigTransaction @relation("TransactionProposals", fields: [multisigTransactionId], references: [id])
+
+  @@map("multisig_proposals")
+}
+
+model MultisigApproval {
+  id            Int      @id @default(autoincrement())
+  multisigTransactionId Int
+  memberId      Int
+  approvalType  MultisigApprovalType @default(APPROVE)
+  createdAt     DateTime @default(now())
+
+  // Relations
+  transaction   MultisigTransaction @relation("TransactionApprovals", fields: [multisigTransactionId], references: [id])
+  member        MultisigMember @relation("MemberApprovals", fields: [memberId], references: [id])
+
+  @@map("multisig_approvals")
+}
+
 enum TransferStatus {
   PENDING
   COMPLETED
@@ -268,4 +352,27 @@ enum ExternalFeeStatus {
   COLLECTED
   REFUNDED
   PENDING
+}
+
+enum MultisigTransactionStatus {
+  PENDING
+  PROPOSED
+  APPROVED
+  EXECUTED
+  REJECTED
+  CANCELLED
+  FAILED
+}
+
+enum MultisigProposalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  STALE
+}
+
+enum MultisigApprovalType {
+  APPROVE
+  REJECT
 }

@@ -167,8 +167,10 @@ router.post('/', async (req: Request, res: Response) => {
       notes
     );
 
-    res.status(201).json({
-      message: 'External transfer completed successfully',
+    const response: any = {
+      message: result.requiresApproval 
+        ? 'External transfer created successfully - requires multisig approval' 
+        : 'External transfer completed successfully',
       transferId: result.transferId,
       userId,
       fromWallet: user.solanaWallet,
@@ -177,9 +179,18 @@ router.post('/', async (req: Request, res: Response) => {
       fee: result.fee,
       netAmount: result.netAmount,
       feeWalletAddress: result.feeWalletAddress,
-      transactionHash: result.transactionHash,
-      currency
-    });
+      currency,
+      requiresApproval: result.requiresApproval
+    };
+
+    if (result.requiresApproval && result.multisigTransactionIndex) {
+      response.multisigTransactionIndex = result.multisigTransactionIndex;
+      response.message += ` - Transaction Index: ${result.multisigTransactionIndex}`;
+    } else if ('transactionHash' in result && result.transactionHash) {
+      response.transactionHash = result.transactionHash;
+    }
+
+    res.status(201).json(response);
   } catch (error) {
     console.error('Error processing external transfer:', error);
     
@@ -577,6 +588,101 @@ router.post('/fees/calculate', async (req: Request, res: Response) => {
     res.status(500).json({
       message: 'Failed to calculate fee',
       error: 'Internal Server Error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/external-transfers/{transferId}/execute-multisig:
+ *   post:
+ *     summary: Execute approved multisig transfer
+ *     tags: [External Transfers]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: path
+ *         name: transferId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Transfer ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - transactionIndex
+ *               - executorKey
+ *             properties:
+ *               transactionIndex:
+ *                 type: string
+ *                 description: Multisig transaction index
+ *               executorKey:
+ *                 type: string
+ *                 description: Executor's public key
+ *     responses:
+ *       200:
+ *         description: Multisig transfer executed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 transactionHash:
+ *                   type: string
+ *       400:
+ *         description: Bad request
+ *       404:
+ *         description: Transfer not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/:transferId/execute-multisig', async (req: Request, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    const { transactionIndex, executorKey } = req.body;
+
+    if (!transactionIndex || !executorKey) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields',
+        error: 'Bad Request',
+        required: ['transactionIndex', 'executorKey']
+      });
+    }
+
+    const result = await ExternalTransferService.executeMultisigTransfer(
+      parseInt(transferId),
+      transactionIndex,
+      executorKey
+    );
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Multisig transfer executed successfully',
+        transactionHash: result.transactionHash
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: 'Failed to execute multisig transfer',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error executing multisig transfer:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

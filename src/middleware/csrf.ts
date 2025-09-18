@@ -10,14 +10,22 @@ export const generateCSRFToken = (req: Request, res: Response, next: NextFunctio
   const now = Date.now();
   const tokenExpiry = 24 * 60 * 60 * 1000; // 24 hours
   
-  // Generate a new token
-  const token = crypto.randomBytes(32).toString('hex');
+  // Check if we already have a valid token for this IP
+  const existingToken = csrfTokens.get(ip);
   
-  // Store token with expiry
-  csrfTokens.set(ip, { token, expires: now + tokenExpiry });
-  
-  // Add token to response headers for frontend to use
-  res.setHeader('X-CSRF-Token', token);
+  if (existingToken && now < existingToken.expires) {
+    // Use existing token
+    res.setHeader('X-CSRF-Token', existingToken.token);
+  } else {
+    // Generate a new token
+    const token = crypto.randomBytes(32).toString('hex');
+    
+    // Store token with expiry
+    csrfTokens.set(ip, { token, expires: now + tokenExpiry });
+    
+    // Add token to response headers for frontend to use
+    res.setHeader('X-CSRF-Token', token);
+  }
   
   next();
 };
@@ -65,9 +73,20 @@ export const verifyCSRFToken = (req: Request, res: Response, next: NextFunction)
 // CSRF token endpoint for frontend
 export const getCSRFToken = (req: Request, res: Response) => {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
-  const storedToken = csrfTokens.get(ip);
+  const now = Date.now();
+  const tokenExpiry = 24 * 60 * 60 * 1000; // 24 hours
+  
+  // Check if we have a valid token
+  let storedToken = csrfTokens.get(ip);
+  
+  // If no token or expired, generate a new one
+  if (!storedToken || now > storedToken.expires) {
+    const token = crypto.randomBytes(32).toString('hex');
+    storedToken = { token, expires: now + tokenExpiry };
+    csrfTokens.set(ip, storedToken);
+  }
   
   res.json({
-    csrfToken: storedToken?.token || null
+    csrfToken: storedToken.token
   });
 };

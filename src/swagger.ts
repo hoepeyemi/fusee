@@ -590,6 +590,200 @@ const options = {
             },
           },
         },
+        Multisig: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Multisig ID',
+            },
+            multisigPda: {
+              type: 'string',
+              description: 'Multisig PDA address',
+            },
+            createKey: {
+              type: 'string',
+              description: 'Create key used to derive the multisig',
+            },
+            name: {
+              type: 'string',
+              description: 'Multisig name',
+            },
+            threshold: {
+              type: 'integer',
+              description: 'Number of approvals required',
+            },
+            timeLock: {
+              type: 'integer',
+              description: 'Time lock in seconds',
+            },
+            isActive: {
+              type: 'boolean',
+              description: 'Whether multisig is active',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Multisig creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Multisig last update date',
+            },
+          },
+        },
+        MultisigMember: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Member ID',
+            },
+            multisigId: {
+              type: 'integer',
+              description: 'Multisig ID',
+            },
+            publicKey: {
+              type: 'string',
+              description: 'Member public key',
+            },
+            permissions: {
+              type: 'string',
+              description: 'JSON string of permissions',
+            },
+            isActive: {
+              type: 'boolean',
+              description: 'Whether member is active',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Member creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Member last update date',
+            },
+          },
+        },
+        MultisigTransaction: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Transaction ID',
+            },
+            multisigId: {
+              type: 'integer',
+              description: 'Multisig ID',
+            },
+            transactionIndex: {
+              type: 'string',
+              description: 'Transaction index from multisig',
+            },
+            fromWallet: {
+              type: 'string',
+              description: 'Source wallet address',
+            },
+            toWallet: {
+              type: 'string',
+              description: 'Destination wallet address',
+            },
+            amount: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Transfer amount',
+            },
+            currency: {
+              type: 'string',
+              description: 'Currency type',
+            },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'PROPOSED', 'APPROVED', 'EXECUTED', 'REJECTED', 'CANCELLED', 'FAILED'],
+              description: 'Transaction status',
+            },
+            transactionHash: {
+              type: 'string',
+              description: 'Blockchain transaction hash',
+            },
+            memo: {
+              type: 'string',
+              description: 'Transaction memo',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Transaction creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Transaction last update date',
+            },
+          },
+        },
+        MultisigProposal: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Proposal ID',
+            },
+            multisigTransactionId: {
+              type: 'integer',
+              description: 'Multisig transaction ID',
+            },
+            proposerKey: {
+              type: 'string',
+              description: 'Proposer public key',
+            },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED', 'STALE'],
+              description: 'Proposal status',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Proposal creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Proposal last update date',
+            },
+          },
+        },
+        MultisigApproval: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Approval ID',
+            },
+            multisigTransactionId: {
+              type: 'integer',
+              description: 'Multisig transaction ID',
+            },
+            memberId: {
+              type: 'integer',
+              description: 'Member ID',
+            },
+            approvalType: {
+              type: 'string',
+              enum: ['APPROVE', 'REJECT'],
+              description: 'Approval type',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Approval creation date',
+            },
+          },
+        },
         Error: {
           type: 'object',
           properties: {

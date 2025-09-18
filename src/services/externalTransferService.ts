@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma';
 import FeeWalletService from './feeWalletService';
+import { getMultisigService } from './multisigService';
 
 export class ExternalTransferService {
   private static readonly FEE_RATE = 0.00001; // 0.001% = 0.00001
@@ -18,7 +19,7 @@ export class ExternalTransferService {
   }
 
   /**
-   * Process external wallet transfer with fee collection
+   * Process external wallet transfer with fee collection using multisig
    */
   public static async processExternalTransfer(
     userId: number,
@@ -32,7 +33,8 @@ export class ExternalTransferService {
     fee: number;
     netAmount: number;
     feeWalletAddress: string;
-    transactionHash: string;
+    multisigTransactionIndex?: string;
+    requiresApproval: boolean;
   }> {
     // Verify user exists and has sufficient balance
     const user = await prisma.user.findUnique({
@@ -82,7 +84,56 @@ export class ExternalTransferService {
       }
     });
 
-    // Simulate blockchain transaction
+    // Check if multisig is configured
+    const multisigService = getMultisigService();
+    const multisigPda = process.env.MULTISIG_PDA;
+
+    if (multisigPda) {
+      try {
+        // Create multisig transaction for external transfer
+        const multisigResult = await multisigService.createVaultTransaction(
+          fromWallet,
+          toExternalWallet,
+          amount,
+          notes || `External transfer: ${amount} ${currency} to ${toExternalWallet}`
+        );
+
+        // Save multisig transaction to database
+        const multisigData = await prisma.multisig.findUnique({
+          where: { multisigPda }
+        });
+
+        if (multisigData) {
+          await multisigService.saveTransactionToDatabase(
+            multisigData.id,
+            multisigResult.transactionIndex,
+            fromWallet,
+            toExternalWallet,
+            amount,
+            currency,
+            notes
+          );
+        }
+
+        console.log(`🔐 Multisig transaction created for external transfer: ${multisigResult.transactionIndex}`);
+        console.log(`💰 External transfer requires multisig approval: ${amount} ${currency} from ${fromWallet} to external wallet ${toExternalWallet}`);
+        console.log(`💰 Fee to be collected: ${fee} ${currency} (${this.FEE_RATE * 100}%)`);
+
+        return {
+          transferId: externalTransfer.id,
+          fee,
+          netAmount,
+          feeWalletAddress,
+          multisigTransactionIndex: multisigResult.transactionIndex.toString(),
+          requiresApproval: true
+        };
+      } catch (error) {
+        console.error('Error creating multisig transaction:', error);
+        // Fall back to direct transfer if multisig fails
+      }
+    }
+
+    // Fallback: Direct transfer without multisig
     const transactionHash = `EXTERNAL_TRANSFER_${Date.now()}_${Math.random().toString(16).substr(2, 8)}`;
 
     // Update transfer with transaction hash and mark as completed
@@ -104,7 +155,7 @@ export class ExternalTransferService {
       }
     });
 
-    console.log(`💰 External transfer completed: ${amount} ${currency} from ${fromWallet} to external wallet ${toExternalWallet}`);
+    console.log(`💰 External transfer completed (direct): ${amount} ${currency} from ${fromWallet} to external wallet ${toExternalWallet}`);
     console.log(`💰 Fee collected: ${fee} ${currency} (${this.FEE_RATE * 100}%)`);
     console.log(`💰 Fee sent to: ${feeWalletAddress}`);
 
@@ -113,7 +164,7 @@ export class ExternalTransferService {
       fee,
       netAmount,
       feeWalletAddress,
-      transactionHash
+      requiresApproval: false
     };
   }
 
@@ -261,6 +312,88 @@ export class ExternalTransferService {
     });
     
     return !!user;
+  }
+
+  /**
+   * Execute approved multisig transaction for external transfer
+   */
+  public static async executeMultisigTransfer(
+    transferId: number,
+    transactionIndex: string,
+    executorKey: string
+  ): Promise<{
+    success: boolean;
+    transactionHash?: string;
+    error?: string;
+  }> {
+    try {
+      // Get the transfer
+      const transfer = await prisma.externalTransfer.findUnique({
+        where: { id: transferId }
+      });
+
+      if (!transfer) {
+        throw new Error('Transfer not found');
+      }
+
+      // Get multisig service
+      const multisigService = getMultisigService();
+      const multisigPda = process.env.MULTISIG_PDA;
+
+      if (!multisigPda) {
+        throw new Error('Multisig not configured');
+      }
+
+      // Check if transaction is approved
+      const isApproved = await multisigService.isTransactionApproved(BigInt(transactionIndex));
+      
+      if (!isApproved) {
+        throw new Error('Transaction not approved by multisig');
+      }
+
+      // Execute the vault transaction
+      const instruction = await multisigService.executeVaultTransaction(
+        BigInt(transactionIndex),
+        executorKey
+      );
+
+      // Simulate successful execution
+      const transactionHash = `MULTISIG_EXTERNAL_TRANSFER_${Date.now()}_${Math.random().toString(16).substr(2, 8)}`;
+
+      // Update transfer status
+      await prisma.externalTransfer.update({
+        where: { id: transferId },
+        data: {
+          transactionHash,
+          status: 'COMPLETED'
+        }
+      });
+
+      // Update user balance (deduct full amount including fee)
+      await prisma.user.update({
+        where: { id: transfer.userId },
+        data: {
+          balance: {
+            decrement: Number(transfer.amount)
+          }
+        }
+      });
+
+      console.log(`🔐 Multisig external transfer executed: ${transactionHash}`);
+      console.log(`💰 Amount: ${transfer.amount} ${transfer.currency}`);
+      console.log(`💰 Fee: ${transfer.fee} ${transfer.currency}`);
+
+      return {
+        success: true,
+        transactionHash
+      };
+    } catch (error) {
+      console.error('Error executing multisig transfer:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 }
 

@@ -7,6 +7,7 @@ import transferRoutes from './routes/transfers';
 import vaultRoutes from './routes/vault';
 import walletTransferRoutes from './routes/walletTransfers';
 import externalTransferRoutes from './routes/externalTransfers';
+import multisigRoutes from './routes/multisig';
 import { 
   helmetMiddleware, 
   rateLimiter, 
@@ -63,6 +64,7 @@ app.use('/api/transfers', verifyCSRFToken, transferRoutes);
 app.use('/api/vault', verifyCSRFToken, vaultRoutes);
 app.use('/api/wallet-transfers', verifyCSRFToken, walletTransferRoutes);
 app.use('/api/external-transfers', verifyCSRFToken, externalTransferRoutes);
+app.use('/api/multisig', verifyCSRFToken, multisigRoutes);
 
 /**
  * @swagger
@@ -117,7 +119,15 @@ app.get('/', (req: Request, res: Response) => {
           getExternalTransfer: 'GET /api/external-transfers/{id}',
           getExternalTransfersByUser: 'GET /api/external-transfers/user/{userId}',
           getExternalTransfersByWallet: 'GET /api/external-transfers/external-wallet/{address}',
-          externalTransferStats: 'GET /api/external-transfers/statistics'
+          externalTransferStats: 'GET /api/external-transfers/statistics',
+          createMultisig: 'POST /api/multisig/create',
+          getMultisig: 'GET /api/multisig/{multisigPda}',
+          createTransaction: 'POST /api/multisig/{multisigPda}/transactions',
+          createProposal: 'POST /api/multisig/{multisigPda}/proposals',
+          approveProposal: 'POST /api/multisig/{multisigPda}/approve',
+          rejectProposal: 'POST /api/multisig/{multisigPda}/reject',
+          executeTransaction: 'POST /api/multisig/{multisigPda}/execute',
+          getTransactionStatus: 'GET /api/multisig/{multisigPda}/status/{transactionIndex}'
         }
   });
 });
