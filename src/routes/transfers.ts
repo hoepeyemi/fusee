@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { validateTransfer, handleValidationErrors } from '../middleware/security';
 import DedicatedWalletService from '../services/dedicatedWallet';
+import FeeService from '../services/feeService';
 
 const router = Router();
 
@@ -102,22 +103,30 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
       });
     }
 
-    // Check if sender has sufficient balance in vault
-    if (Number(sender.balance) < parseFloat(amount)) {
+    // Calculate fee and net amount
+    const { fee, netAmount } = FeeService.calculateFee(parseFloat(amount));
+    
+    // Check if sender has sufficient balance in vault (including fee)
+    const totalRequired = parseFloat(amount);
+    if (Number(sender.balance) < totalRequired) {
       return res.status(400).json({
         message: 'Insufficient balance in vault',
         error: 'Bad Request',
         currentBalance: Number(sender.balance),
-        requestedAmount: parseFloat(amount)
+        requestedAmount: totalRequired,
+        fee: fee,
+        totalRequired: totalRequired
       });
     }
 
-    // Create transfer record
+    // Create transfer record with fee information
     const transfer = await prisma.transfer.create({
       data: {
         senderId,
         receiverId: receiver.id,
         amount: parseFloat(amount),
+        fee: fee,
+        netAmount: netAmount,
         currency,
         notes,
         status: 'PENDING'
@@ -151,6 +160,9 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
     // Simulate successful transfer through dedicated wallet
     const simulatedTransactionHash = `DEDICATED_TRANSFER_${Date.now()}_${Math.random().toString(16).substr(2, 8)}`;
     
+    // Process fee collection
+    const feeResult = await FeeService.processTransferFee(transfer.id, parseFloat(amount), currency);
+
     // Update transfer with simulated transaction hash and mark as completed
     const completedTransfer = await prisma.transfer.update({
       where: { id: transfer.id },
@@ -180,7 +192,7 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
       }
     });
 
-    // Update sender's balance (deduct from vault)
+    // Update sender's balance (deduct full amount including fee)
     await prisma.user.update({
       where: { id: senderId },
       data: {
@@ -190,12 +202,12 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
       }
     });
 
-    // Update receiver's balance (add to vault)
+    // Update receiver's balance (add net amount after fee)
     await prisma.user.update({
       where: { id: receiver.id },
       data: {
         balance: {
-          increment: parseFloat(amount)
+          increment: netAmount
         }
       }
     });
@@ -203,7 +215,13 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
     res.status(201).json({
       message: 'Transfer completed successfully through dedicated wallet',
       transfer: completedTransfer,
-      dedicatedWalletAddress: walletAddress
+      dedicatedWalletAddress: walletAddress,
+      fee: {
+        amount: feeResult.fee,
+        rate: '0.001%',
+        netAmount: feeResult.netAmount,
+        feeWalletAddress: feeResult.feeWalletAddress
+      }
     });
   } catch (error) {
     console.error('Error creating transfer:', error);

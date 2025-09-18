@@ -1,6 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
+import dotenv from 'dotenv';
 
-const prisma = new PrismaClient();
+// Load environment variables from project root
+dotenv.config({ path: '.env' });
 
 export class DedicatedWalletService {
   private static instance: DedicatedWalletService;
@@ -17,7 +19,7 @@ export class DedicatedWalletService {
   }
 
   public getWalletAddress(): string {
-    return process.env.DEDICATED_WALLET_ADDRESS || '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM';
+    return process.env.DEDICATED_WALLET_ADDRESS || '';
   }
 
   public getWalletName(): string {

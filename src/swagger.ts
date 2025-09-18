@@ -57,104 +57,119 @@ const options = {
             },
           },
         },
-        Transfer: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'integer',
-              description: 'Transfer ID',
-            },
-            senderId: {
-              type: 'integer',
-              description: 'Sender user ID',
-            },
-            receiverId: {
-              type: 'integer',
-              description: 'Receiver user ID',
-            },
-            amount: {
-              type: 'number',
-              format: 'decimal',
-              description: 'Transfer amount',
-            },
-            currency: {
-              type: 'string',
-              description: 'Currency type',
-              example: 'SOL',
-            },
-            status: {
-              type: 'string',
-              enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
-              description: 'Transfer status',
-            },
-            transactionHash: {
-              type: 'string',
-              description: 'Blockchain transaction hash',
-            },
-            notes: {
-              type: 'string',
-              description: 'Transfer notes',
-            },
-            createdAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Transfer creation date',
-            },
-            updatedAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Transfer last update date',
-            },
-            sender: {
+            Transfer: {
               type: 'object',
-              description: 'Sender user details',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'Transfer ID',
+                },
+                senderId: {
+                  type: 'integer',
+                  description: 'Sender user ID',
+                },
+                receiverId: {
+                  type: 'integer',
+                  description: 'Receiver user ID',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Transfer amount',
+                },
+                fee: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Transfer fee (0.001%)',
+                },
+                netAmount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Amount after fee deduction',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                  example: 'SOL',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+                  description: 'Transfer status',
+                },
+                transactionHash: {
+                  type: 'string',
+                  description: 'Blockchain transaction hash',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Transfer notes',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Transfer creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Transfer last update date',
+                },
+                sender: {
+                  type: 'object',
+                  description: 'Sender user details',
+                },
+                receiver: {
+                  type: 'object',
+                  description: 'Receiver user details',
+                },
+              },
             },
-            receiver: {
+            Vault: {
               type: 'object',
-              description: 'Receiver user details',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'Vault ID',
+                },
+                address: {
+                  type: 'string',
+                  description: 'Vault wallet address',
+                },
+                name: {
+                  type: 'string',
+                  description: 'Vault name',
+                },
+                totalBalance: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Total vault balance',
+                },
+                feeBalance: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Total fees collected',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Vault currency',
+                },
+                isActive: {
+                  type: 'boolean',
+                  description: 'Whether vault is active',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Vault creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Vault last update date',
+                },
+              },
             },
-          },
-        },
-        Vault: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'integer',
-              description: 'Vault ID',
-            },
-            address: {
-              type: 'string',
-              description: 'Vault wallet address',
-            },
-            name: {
-              type: 'string',
-              description: 'Vault name',
-            },
-            totalBalance: {
-              type: 'number',
-              format: 'decimal',
-              description: 'Total vault balance',
-            },
-            currency: {
-              type: 'string',
-              description: 'Vault currency',
-            },
-            isActive: {
-              type: 'boolean',
-              description: 'Whether vault is active',
-            },
-            createdAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Vault creation date',
-            },
-            updatedAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Vault last update date',
-            },
-          },
-        },
         Deposit: {
           type: 'object',
           properties: {
@@ -204,55 +219,217 @@ const options = {
             },
           },
         },
-        Withdrawal: {
-          type: 'object',
-          properties: {
-            id: {
-              type: 'integer',
-              description: 'Withdrawal ID',
+            Withdrawal: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'Withdrawal ID',
+                },
+                userId: {
+                  type: 'integer',
+                  description: 'User ID',
+                },
+                vaultId: {
+                  type: 'integer',
+                  description: 'Vault ID',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Withdrawal amount',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+                  description: 'Withdrawal status',
+                },
+                transactionHash: {
+                  type: 'string',
+                  description: 'Blockchain transaction hash',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Withdrawal notes',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Withdrawal creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Withdrawal last update date',
+                },
+              },
             },
-            userId: {
-              type: 'integer',
-              description: 'User ID',
+            Fee: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'Fee ID',
+                },
+                transferId: {
+                  type: 'integer',
+                  description: 'Transfer ID',
+                },
+                vaultId: {
+                  type: 'integer',
+                  description: 'Vault ID',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Fee amount',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                },
+                feeRate: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Fee rate (0.001% = 0.00001)',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['COLLECTED', 'REFUNDED', 'PENDING'],
+                  description: 'Fee status',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Fee creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Fee last update date',
+                },
+              },
             },
-            vaultId: {
-              type: 'integer',
-              description: 'Vault ID',
+            WalletTransfer: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'Wallet transfer ID',
+                },
+                fromWallet: {
+                  type: 'string',
+                  description: 'Source wallet address',
+                },
+                toWallet: {
+                  type: 'string',
+                  description: 'Destination wallet address',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Transfer amount',
+                },
+                fee: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Transfer fee (0.001%)',
+                },
+                netAmount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Amount after fee deduction',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+                  description: 'Transfer status',
+                },
+                transactionHash: {
+                  type: 'string',
+                  description: 'Blockchain transaction hash',
+                },
+                feeWalletAddress: {
+                  type: 'string',
+                  description: 'Address where fee was sent',
+                },
+                notes: {
+                  type: 'string',
+                  description: 'Transfer notes',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Transfer creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Transfer last update date',
+                },
+                fees: {
+                  type: 'array',
+                  items: {
+                    $ref: '#/components/schemas/WalletFee'
+                  },
+                  description: 'Associated fee records',
+                },
+              },
             },
-            amount: {
-              type: 'number',
-              format: 'decimal',
-              description: 'Withdrawal amount',
+            WalletFee: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                  description: 'Wallet fee ID',
+                },
+                walletTransferId: {
+                  type: 'integer',
+                  description: 'Wallet transfer ID',
+                },
+                amount: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Fee amount',
+                },
+                currency: {
+                  type: 'string',
+                  description: 'Currency type',
+                },
+                feeRate: {
+                  type: 'number',
+                  format: 'decimal',
+                  description: 'Fee rate (0.001% = 0.00001)',
+                },
+                feeWalletAddress: {
+                  type: 'string',
+                  description: 'Address where fee was sent',
+                },
+                status: {
+                  type: 'string',
+                  enum: ['COLLECTED', 'REFUNDED', 'PENDING'],
+                  description: 'Fee status',
+                },
+                createdAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Fee creation date',
+                },
+                updatedAt: {
+                  type: 'string',
+                  format: 'date-time',
+                  description: 'Fee last update date',
+                },
+              },
             },
-            currency: {
-              type: 'string',
-              description: 'Currency type',
-            },
-            status: {
-              type: 'string',
-              enum: ['PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'],
-              description: 'Withdrawal status',
-            },
-            transactionHash: {
-              type: 'string',
-              description: 'Blockchain transaction hash',
-            },
-            notes: {
-              type: 'string',
-              description: 'Withdrawal notes',
-            },
-            createdAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Withdrawal creation date',
-            },
-            updatedAt: {
-              type: 'string',
-              format: 'date-time',
-              description: 'Withdrawal last update date',
-            },
-          },
-        },
         User: {
           type: 'object',
           properties: {

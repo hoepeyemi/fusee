@@ -46,6 +46,8 @@ model Transfer {
   senderId      Int
   receiverId    Int
   amount        Decimal  @db.Decimal(18, 8) // Support up to 18 digits with 8 decimal places
+  fee           Decimal  @db.Decimal(18, 8) // Transfer fee (0.001%)
+  netAmount     Decimal  @db.Decimal(18, 8) // Amount after fee deduction
   currency      String   @default("SOL") // Default to Solana
   status        TransferStatus @default(PENDING)
   transactionHash String? // Blockchain transaction hash
@@ -56,6 +58,7 @@ model Transfer {
   // Relations
   sender        User     @relation("SenderTransfers", fields: [senderId], references: [id])
   receiver      User     @relation("ReceiverTransfers", fields: [receiverId], references: [id])
+  fees          Fee[]    @relation("TransferFees")
 
   @@map("transfers")
 }
@@ -65,6 +68,7 @@ model Vault {
   address       String   @unique
   name          String   @default("Main Vault")
   totalBalance  Decimal  @default(0) @db.Decimal(18, 8)
+  feeBalance    Decimal  @default(0) @db.Decimal(18, 8) // Total fees collected
   currency      String   @default("SOL")
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
@@ -73,6 +77,7 @@ model Vault {
   // Relations
   deposits      Deposit[]    @relation("VaultDeposits")
   withdrawals   Withdrawal[] @relation("VaultWithdrawals")
+  fees          Fee[]        @relation("VaultFees")
 
   @@map("vaults")
 }
@@ -115,6 +120,62 @@ model Withdrawal {
   @@map("withdrawals")
 }
 
+model Fee {
+  id            Int      @id @default(autoincrement())
+  transferId    Int
+  vaultId       Int
+  amount        Decimal  @db.Decimal(18, 8) // Fee amount (0.001% of transfer)
+  currency      String   @default("SOL")
+  feeRate       Decimal  @db.Decimal(8, 6) // Fee rate (0.001% = 0.00001)
+  status        FeeStatus @default(COLLECTED)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  transfer      Transfer @relation("TransferFees", fields: [transferId], references: [id])
+  vault         Vault    @relation("VaultFees", fields: [vaultId], references: [id])
+
+  @@map("fees")
+}
+
+model WalletTransfer {
+  id            Int      @id @default(autoincrement())
+  fromWallet    String   // Source wallet address
+  toWallet      String   // Destination wallet address
+  amount        Decimal  @db.Decimal(18, 8) // Transfer amount
+  fee           Decimal  @db.Decimal(18, 8) // Fee amount (0.001%)
+  netAmount     Decimal  @db.Decimal(18, 8) // Amount after fee deduction
+  currency      String   @default("SOL")
+  status        WalletTransferStatus @default(PENDING)
+  transactionHash String? // Blockchain transaction hash
+  feeWalletAddress String // Address where fee was sent
+  notes         String?  // Optional transfer notes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  fees          WalletFee[] @relation("WalletTransferFees")
+
+  @@map("wallet_transfers")
+}
+
+model WalletFee {
+  id            Int      @id @default(autoincrement())
+  walletTransferId Int
+  amount        Decimal  @db.Decimal(18, 8) // Fee amount (0.001% of transfer)
+  currency      String   @default("SOL")
+  feeRate       Decimal  @db.Decimal(8, 6) // Fee rate (0.001% = 0.00001)
+  feeWalletAddress String // Address where fee was sent
+  status        WalletFeeStatus @default(COLLECTED)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  walletTransfer WalletTransfer @relation("WalletTransferFees", fields: [walletTransferId], references: [id])
+
+  @@map("wallet_fees")
+}
+
 enum TransferStatus {
   PENDING
   COMPLETED
@@ -134,4 +195,23 @@ enum WithdrawalStatus {
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum FeeStatus {
+  COLLECTED
+  REFUNDED
+  PENDING
+}
+
+enum WalletTransferStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WalletFeeStatus {
+  COLLECTED
+  REFUNDED
+  PENDING
 }
