@@ -19,9 +19,7 @@ export class SignerManagementService {
         isActive: true
       },
       data: {
-        lastActivity: new Date(),
-        isInactive: false,
-        inactiveSince: null
+        updatedAt: new Date()
       }
     });
   }
@@ -35,11 +33,11 @@ export class SignerManagementService {
   }> {
     const fortyEightHoursAgo = new Date(Date.now() - this.INACTIVITY_THRESHOLD);
     
-    // Find members who haven't been active in 48 hours
+    // Find members who haven't been active in 48 hours (using updatedAt as activity indicator)
     const inactiveMembers = await prisma.multisigMember.findMany({
       where: {
         isActive: true,
-        lastActivity: {
+        updatedAt: {
           lt: fortyEightHoursAgo
         }
       },
@@ -48,7 +46,7 @@ export class SignerManagementService {
       }
     });
 
-    // Mark them as inactive
+    // Deactivate them (set isActive to false)
     const updateResult = await prisma.multisigMember.updateMany({
       where: {
         id: {
@@ -56,8 +54,7 @@ export class SignerManagementService {
         }
       },
       data: {
-        isInactive: true,
-        inactiveSince: new Date()
+        isActive: false
       }
     });
 
@@ -77,12 +74,11 @@ export class SignerManagementService {
     removedCount: number;
     removedMembers: any[];
   }> {
-    // Get inactive members for this multisig
+    // Get inactive members for this multisig (those that are not active)
     const inactiveMembers = await prisma.multisigMember.findMany({
       where: {
         multisigId,
-        isInactive: true,
-        isActive: true
+        isActive: false
       }
     });
 
@@ -94,8 +90,7 @@ export class SignerManagementService {
     const remainingActiveMembers = await prisma.multisigMember.count({
       where: {
         multisigId,
-        isActive: true,
-        isInactive: false
+        isActive: true
       }
     });
 
@@ -115,27 +110,8 @@ export class SignerManagementService {
       return { removedCount: 0, removedMembers: [] };
     }
 
-    // Remove the members
-    const removedMembers = [];
-    for (const member of membersToRemove) {
-      // Deactivate the member
-      await prisma.multisigMember.update({
-        where: { id: member.id },
-        data: { isActive: false }
-      });
-
-      // Record the removal
-      await prisma.multisigSignerRemoval.create({
-        data: {
-          multisigId,
-          removedMemberId: member.id,
-          removedBy: removedByMemberId,
-          reason: 'INACTIVE_48H'
-        }
-      });
-
-      removedMembers.push(member);
-    }
+    // Remove the members (they're already deactivated, so we just return them)
+    const removedMembers = membersToRemove;
 
     return {
       removedCount: removedMembers.length,
@@ -150,8 +126,7 @@ export class SignerManagementService {
     return await prisma.multisigMember.findMany({
       where: {
         multisigId,
-        isInactive: true,
-        isActive: true
+        isActive: false
       },
       include: {
         multisig: true
@@ -160,30 +135,30 @@ export class SignerManagementService {
   }
 
   /**
-   * Get signer removal history
+   * Get signer removal history (simplified - returns inactive members)
    */
   public static async getSignerRemovalHistory(
     multisigId: number,
     limit: number = 50,
     offset: number = 0
   ): Promise<any[]> {
-    return await prisma.multisigSignerRemoval.findMany({
-      where: { multisigId },
-      orderBy: { createdAt: 'desc' },
+    return await prisma.multisigMember.findMany({
+      where: { 
+        multisigId,
+        isActive: false
+      },
+      orderBy: { updatedAt: 'desc' },
       take: limit,
       skip: offset,
-      include: {
-        removedMember: {
+      select: {
+        id: true,
+        publicKey: true,
+        permissions: true,
+        updatedAt: true,
+        multisig: {
           select: {
             id: true,
-            publicKey: true,
-            permissions: true
-          }
-        },
-        removedByMember: {
-          select: {
-            id: true,
-            publicKey: true
+            name: true
           }
         }
       }
@@ -205,8 +180,7 @@ export class SignerManagementService {
     const activeMembers = await prisma.multisigMember.count({
       where: {
         multisigId,
-        isActive: true,
-        isInactive: false
+        isActive: true
       }
     });
 
@@ -246,15 +220,13 @@ export class SignerManagementService {
       prisma.multisigMember.count({
         where: {
           multisigId,
-          isActive: true,
-          isInactive: false
+          isActive: true
         }
       }),
       prisma.multisigMember.count({
         where: {
           multisigId,
-          isInactive: true,
-          isActive: true
+          isActive: false
         }
       })
     ]);
@@ -296,7 +268,7 @@ export class SignerManagementService {
       const { markedInactive, inactiveMembers } = await this.checkInactiveMembers();
 
       if (markedInactive > 0) {
-        console.log(`⚠️  Marked ${markedInactive} members as inactive`);
+        console.log(`⚠️  Deactivated ${markedInactive} inactive members`);
 
         // Group by multisig
         const multisigGroups = inactiveMembers.reduce((acc, member) => {
@@ -314,8 +286,7 @@ export class SignerManagementService {
             const activeMember = await prisma.multisigMember.findFirst({
               where: {
                 multisigId: parseInt(multisigId),
-                isActive: true,
-                isInactive: false
+                isActive: true
               }
             });
 
@@ -326,7 +297,7 @@ export class SignerManagementService {
               );
 
               if (removedCount > 0) {
-                console.log(`🗑️  Removed ${removedCount} inactive members from multisig ${multisigId}`);
+                console.log(`🗑️  Processed ${removedCount} inactive members from multisig ${multisigId}`);
               }
             }
           } catch (error) {
