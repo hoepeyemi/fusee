@@ -1,6 +1,7 @@
 import * as multisig from "@sqds/multisig";
 import { Connection, Keypair, PublicKey, TransactionMessage, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { PrismaClient } from "@prisma/client";
+import { SignerManagementService } from "./signerManagementService";
 
 const prisma = new PrismaClient();
 
@@ -171,6 +172,15 @@ export class MultisigService {
       throw new Error("Multisig not initialized");
     }
 
+    // Update member activity
+    const multisigData = await prisma.multisig.findUnique({
+      where: { multisigPda: this.multisigPda.toString() }
+    });
+
+    if (multisigData) {
+      await SignerManagementService.updateMemberActivity(multisigData.id, proposerKey);
+    }
+
     const instruction = await multisig.instructions.proposalCreate({
       multisigPda: this.multisigPda,
       transactionIndex,
@@ -189,6 +199,15 @@ export class MultisigService {
   ): Promise<any> {
     if (!this.multisigPda) {
       throw new Error("Multisig not initialized");
+    }
+
+    // Update member activity
+    const multisigData = await prisma.multisig.findUnique({
+      where: { multisigPda: this.multisigPda.toString() }
+    });
+
+    if (multisigData) {
+      await SignerManagementService.updateMemberActivity(multisigData.id, memberKey);
     }
 
     const instruction = await multisig.instructions.proposalApprove({

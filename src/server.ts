@@ -8,6 +8,8 @@ import vaultRoutes from './routes/vault';
 import walletTransferRoutes from './routes/walletTransfers';
 import externalTransferRoutes from './routes/externalTransfers';
 import multisigRoutes from './routes/multisig';
+import signerManagementRoutes from './routes/signerManagement';
+import { BackgroundJobs } from './services/backgroundJobs';
 import { 
   helmetMiddleware, 
   rateLimiter, 
@@ -84,6 +86,7 @@ app.use('/api/vault', verifyCSRFToken, vaultRoutes);
 app.use('/api/wallet-transfers', verifyCSRFToken, walletTransferRoutes);
 app.use('/api/external-transfers', verifyCSRFToken, externalTransferRoutes);
 app.use('/api/multisig', verifyCSRFToken, multisigRoutes);
+app.use('/api/signer-management', verifyCSRFToken, signerManagementRoutes);
 
 /**
  * @swagger
@@ -172,6 +175,9 @@ console.log('🌐 Starting server...');
 app.listen(PORT, () => {
   console.log(`⚡️[server]: Server is running at http://localhost:${PORT}`);
   console.log(`📚[docs]: API documentation available at http://localhost:${PORT}/api-docs`);
+  
+  // Start background jobs
+  BackgroundJobs.start();
 });
 
 console.log('✅ Server setup complete');

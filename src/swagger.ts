@@ -788,6 +788,66 @@ const options = {
             },
           },
         },
+        MultisigSignerRemoval: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Removal record ID',
+            },
+            multisigId: {
+              type: 'integer',
+              description: 'Multisig ID',
+            },
+            removedMemberId: {
+              type: 'integer',
+              description: 'ID of the removed member',
+            },
+            removedBy: {
+              type: 'integer',
+              description: 'ID of the member who initiated removal',
+            },
+            reason: {
+              type: 'string',
+              description: 'Reason for removal',
+              example: 'INACTIVE_48H',
+            },
+            transactionIndex: {
+              type: 'string',
+              description: 'Transaction index if removal was part of a transaction',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Removal creation date',
+            },
+            removedMember: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                },
+                publicKey: {
+                  type: 'string',
+                },
+                permissions: {
+                  type: 'string',
+                },
+              },
+            },
+            removedByMember: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'integer',
+                },
+                publicKey: {
+                  type: 'string',
+                },
+              },
+            },
+          },
+        },
         Error: {
           type: 'object',
           properties: {
