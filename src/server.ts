@@ -48,22 +48,12 @@ const corsOptions = {
       'https://fusee.onrender.com'
     ];
     
-    // Always allow render.com domains (more permissive)
-    console.log('CORS checking origin:', origin);
-    console.log('Origin includes render.com:', origin.includes('render.com'));
-    console.log('Origin includes fusee.onrender.com:', origin.includes('fusee.onrender.com'));
-    console.log('Origin in allowedOrigins:', allowedOrigins.includes(origin));
-    
-    if (origin.includes('render.com') || 
-        origin.includes('fusee.onrender.com') ||
-        allowedOrigins.includes(origin)) {
-      console.log('CORS allowing origin:', origin);
-      return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
-    
-    console.log('CORS blocked origin:', origin);
-    console.log('Allowed origins:', allowedOrigins);
-    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
