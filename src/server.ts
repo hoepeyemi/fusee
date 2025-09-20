@@ -48,11 +48,23 @@ const corsOptions = {
       'https://fusee.onrender.com'
     ];
     
+    // Log for debugging
+    console.log('CORS checking origin:', origin);
+    console.log('Allowed origins:', allowedOrigins);
+    
     if (allowedOrigins.includes(origin)) {
+      console.log('CORS allowing origin:', origin);
       callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
+      // In production, be more permissive for render.com domains and same-origin requests
+      if (process.env.NODE_ENV === 'production' && 
+          (origin?.includes('render.com') || origin?.includes('fusee.onrender.com'))) {
+        console.log('CORS allowing production origin:', origin);
+        callback(null, true);
+      } else {
+        console.log('CORS blocked origin:', origin);
+        callback(new Error('Not allowed by CORS'));
+      }
     }
   },
   credentials: true,
