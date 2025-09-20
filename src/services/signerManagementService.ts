@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../lib/prisma';
 
 export class SignerManagementService {
   private static readonly INACTIVITY_THRESHOLD = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
