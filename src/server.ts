@@ -42,7 +42,7 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [
       'http://localhost:3000',
       'http://localhost:5173',
       'https://fusee.onrender.com'
@@ -50,7 +50,8 @@ const corsOptions = {
     
     // Log for debugging
     console.log('CORS checking origin:', origin);
-    console.log('Allowed origins:', allowedOrigins);
+    console.log('Raw ALLOWED_ORIGINS:', process.env.ALLOWED_ORIGINS);
+    console.log('Parsed allowed origins:', allowedOrigins);
     
     if (allowedOrigins.includes(origin)) {
       console.log('CORS allowing origin:', origin);

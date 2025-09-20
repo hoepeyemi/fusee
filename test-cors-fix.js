@@ -4,6 +4,8 @@ const http = require('http');
 // Test CORS configuration
 async function testCORSFix() {
   console.log('🌐 Testing CORS Configuration Fix...\n');
+  console.log('🔧 Issue: Leading spaces in ALLOWED_ORIGINS environment variable');
+  console.log('🎯 Fix: Added .trim() to remove whitespace from origins\n');
 
   // Test different origins
   const testOrigins = [
