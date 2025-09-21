@@ -1,9 +1,7 @@
 import * as multisig from "@sqds/multisig";
 import { Connection, Keypair, PublicKey, TransactionMessage, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../lib/prisma";
 import { SignerManagementService } from "./signerManagementService";
-
-const prisma = new PrismaClient();
 
 export interface MultisigConfig {
   rpcUrl: string;

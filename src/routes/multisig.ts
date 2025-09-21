@@ -1,11 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '../lib/prisma';
 import { getMultisigService } from '../services/multisigService';
 import { Keypair } from '@solana/web3.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * @swagger
