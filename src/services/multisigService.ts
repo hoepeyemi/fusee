@@ -334,24 +334,81 @@ export class MultisigService {
     createKey: string,
     name: string = "Main Multisig"
   ): Promise<any> {
-    return await prisma.multisig.create({
-      data: {
-        multisigPda,
-        createKey,
-        name,
-        threshold: this.threshold,
-        timeLock: this.timeLock,
-        members: {
-          create: this.members.map(member => ({
-            publicKey: member.publicKey,
-            permissions: JSON.stringify(member.permissions),
-          })),
-        },
-      },
-      include: {
-        members: true,
-      },
+    // Check if multisig already exists
+    const existingMultisig = await prisma.multisig.findUnique({
+      where: { multisigPda },
+      include: { members: true }
     });
+
+    if (existingMultisig) {
+      console.log(`Multisig already exists: ${multisigPda}`);
+      return existingMultisig;
+    }
+
+    // Use a transaction to handle potential member conflicts
+    return await prisma.$transaction(async (tx) => {
+      // Create the multisig first
+      const newMultisig = await tx.multisig.create({
+        data: {
+          multisigPda,
+          createKey,
+          name,
+          threshold: this.threshold,
+          timeLock: this.timeLock,
+        },
+      });
+
+      // Create members one by one, handling conflicts
+      const createdMembers = [];
+      for (const member of this.members) {
+        try {
+          const createdMember = await tx.multisigMember.create({
+            data: {
+              multisigId: newMultisig.id,
+              publicKey: member.publicKey,
+              permissions: JSON.stringify(member.permissions),
+            },
+          });
+          createdMembers.push(createdMember);
+        } catch (error: any) {
+          if (error.code === 'P2002') {
+            // Member already exists, skip or update
+            console.log(`Member ${member.publicKey} already exists, skipping...`);
+            continue;
+          }
+          throw error;
+        }
+      }
+
+      return {
+        ...newMultisig,
+        members: createdMembers,
+      };
+    });
+  }
+
+  /**
+   * Add member to existing multisig
+   */
+  async addMemberToMultisig(
+    multisigId: number,
+    publicKey: string,
+    permissions: string[]
+  ): Promise<any> {
+    try {
+      return await prisma.multisigMember.create({
+        data: {
+          multisigId,
+          publicKey,
+          permissions: JSON.stringify(permissions),
+        },
+      });
+    } catch (error: any) {
+      if (error.code === 'P2002') {
+        throw new Error(`Member with public key ${publicKey} already exists in this multisig`);
+      }
+      throw error;
+    }
   }
 
   /**
