@@ -39,8 +39,15 @@ app.use(speedLimiter);
 // CORS configuration
 const corsOptions = {
   origin: function (origin: string | undefined, callback: Function) {
+    // Log for debugging
+    console.log('CORS checking origin:', origin);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+    
     // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('CORS allowing request with no origin');
+      return callback(null, true);
+    }
     
     const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
       'http://localhost:3000',
@@ -48,24 +55,22 @@ const corsOptions = {
       'https://fusee.onrender.com'
     ];
     
-    // Log for debugging
-    console.log('CORS checking origin:', origin);
     console.log('Allowed origins:', allowedOrigins);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
     
-    // Check if origin is in allowed list
+    // In production, be more permissive for render.com domains
+    if (process.env.NODE_ENV === 'production') {
+      if (origin.includes('render.com') || origin.includes('fusee.onrender.com')) {
+        console.log('CORS allowing render.com origin:', origin);
+        return callback(null, true);
+      }
+    }
+    
     if (allowedOrigins.includes(origin)) {
       console.log('CORS allowing origin:', origin);
       callback(null, true);
     } else {
-      // In production, be more permissive for render.com domains
-      if (process.env.NODE_ENV === 'production' && origin?.includes('render.com')) {
-        console.log('CORS allowing render.com origin:', origin);
-        callback(null, true);
-      } else {
-        console.log('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
@@ -74,21 +79,7 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Fallback CORS for production
-const productionCorsOptions = {
-  origin: true, // Allow all origins in production
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'Accept'],
-  optionsSuccessStatus: 200
-};
-
-// Use appropriate CORS configuration based on environment
-if (process.env.NODE_ENV === 'production') {
-  app.use(cors(productionCorsOptions));
-} else {
-  app.use(cors(corsOptions));
-}
+app.use(cors(corsOptions));
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -187,23 +178,6 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
   res.status(500).json({
     message: 'Something went wrong!',
     error: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
-  });
-});
-
-// CORS test endpoint
-app.get('/api/cors-test', (req: Request, res: Response) => {
-  res.json({
-    message: 'CORS test successful',
-    origin: req.headers.origin || 'No origin header',
-    userAgent: req.headers['user-agent'] || 'No user agent',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    corsHeaders: {
-      'Access-Control-Allow-Origin': res.getHeader('Access-Control-Allow-Origin'),
-      'Access-Control-Allow-Credentials': res.getHeader('Access-Control-Allow-Credentials'),
-      'Access-Control-Allow-Methods': res.getHeader('Access-Control-Allow-Methods'),
-      'Access-Control-Allow-Headers': res.getHeader('Access-Control-Allow-Headers')
-    }
   });
 });
 
