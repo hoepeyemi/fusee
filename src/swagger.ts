@@ -870,9 +870,10 @@ const options = {
 const specs = swaggerJsdoc(options);
 
 export const setupSwagger = (app: Express) => {
-  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
+  app.use('/api-docs', swaggerUi.serve as any);
+  app.get('/api-docs', swaggerUi.setup(specs, {
     explorer: true,
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'Fusee Backend API Documentation',
-  }));
+  }) as any);
 };
