@@ -40,7 +40,7 @@ app.use(speedLimiter);
 // CORS configuration
 const corsOptions = {
   origin: function (origin: string | undefined, callback: Function) {
-    // Allow requests with no origin (like mobile apps or curl requests)
+    // Allow requests with no  (like mobile apps or curl requests)
     if (!origin) {
       console.log('CORS allowing request with no origin');
       return callback(null, true);
