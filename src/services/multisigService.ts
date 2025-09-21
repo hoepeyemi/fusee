@@ -465,13 +465,30 @@ export function getMultisigService(): MultisigService {
   if (!multisigServiceInstance) {
     const config: MultisigConfig = {
       rpcUrl: process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
-      multisigPda: process.env.MULTISIG_PDA,
-      createKey: process.env.MULTISIG_CREATE_KEY,
-      threshold: parseInt(process.env.MULTISIG_THRESHOLD || "2"),
-      timeLock: parseInt(process.env.MULTISIG_TIME_LOCK || "0"),
-      members: JSON.parse(process.env.MULTISIG_MEMBERS || '[]'),
+      // Default values for multisig creation (not used for specific user operations)
+      threshold: 2,
+      members: []
     };
     multisigServiceInstance = new MultisigService(config);
   }
   return multisigServiceInstance;
+}
+
+// New function to create multisig service with user-specific configuration
+export function createUserMultisigService(userMultisigConfig: {
+  multisigPda: string;
+  createKey: string;
+  threshold: number;
+  timeLock: number;
+  members: Array<{ publicKey: string; permissions: string[] }>;
+}): MultisigService {
+  const config: MultisigConfig = {
+    rpcUrl: process.env.SOLANA_RPC_URL || "https://api.mainnet-beta.solana.com",
+    multisigPda: userMultisigConfig.multisigPda,
+    createKey: userMultisigConfig.createKey,
+    threshold: userMultisigConfig.threshold,
+    timeLock: userMultisigConfig.timeLock,
+    members: userMultisigConfig.members,
+  };
+  return new MultisigService(config);
 }

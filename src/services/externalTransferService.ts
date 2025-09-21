@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import FeeWalletService from './feeWalletService';
-import { getMultisigService } from './multisigService';
+import { createUserMultisigService } from './multisigService';
+import { UserMultisigService } from './userMultisigService';
 
 export class ExternalTransferService {
   private static readonly FEE_RATE = 0.00001; // 0.001% = 0.00001
@@ -84,12 +85,26 @@ export class ExternalTransferService {
       }
     });
 
-    // Check if multisig is configured
-    const multisigService = getMultisigService();
-    const multisigPda = process.env.MULTISIG_PDA;
+    // Check if user has multisig configured
+    const userMultisigPda = await UserMultisigService.getUserMultisigPda(userId);
 
-    if (multisigPda) {
+    if (userMultisigPda) {
       try {
+        // Get user's multisig configuration
+        const userMultisig = await UserMultisigService.getUserMultisig(userId);
+        if (!userMultisig || !userMultisig.multisigPda || !userMultisig.createKey) {
+          throw new Error('User multisig configuration not found or incomplete');
+        }
+
+        // Create multisig service with user's specific configuration
+        const multisigService = createUserMultisigService({
+          multisigPda: userMultisig.multisigPda,
+          createKey: userMultisig.createKey,
+          threshold: userMultisig.threshold || 2,
+          timeLock: userMultisig.timeLock || 0,
+          members: userMultisig.members
+        });
+        
         // Create multisig transaction for external transfer
         const multisigResult = await multisigService.createVaultTransaction(
           fromWallet,
@@ -100,7 +115,7 @@ export class ExternalTransferService {
 
         // Save multisig transaction to database
         const multisigData = await prisma.multisig.findUnique({
-          where: { multisigPda }
+          where: { multisigPda: userMultisigPda }
         });
 
         if (multisigData) {
@@ -336,13 +351,20 @@ export class ExternalTransferService {
         throw new Error('Transfer not found');
       }
 
-      // Get multisig service
-      const multisigService = getMultisigService();
-      const multisigPda = process.env.MULTISIG_PDA;
-
-      if (!multisigPda) {
-        throw new Error('Multisig not configured');
+      // Get user's multisig configuration
+      const userMultisig = await UserMultisigService.getUserMultisig(transfer.userId);
+      if (!userMultisig || !userMultisig.multisigPda || !userMultisig.createKey) {
+        throw new Error('User multisig configuration not found');
       }
+
+      // Create multisig service with user's specific configuration
+      const multisigService = createUserMultisigService({
+        multisigPda: userMultisig.multisigPda,
+        createKey: userMultisig.createKey,
+        threshold: userMultisig.threshold || 2,
+        timeLock: userMultisig.timeLock || 0,
+        members: userMultisig.members
+      });
 
       // Check if transaction is approved
       const isApproved = await multisigService.isTransactionApproved(BigInt(transactionIndex));

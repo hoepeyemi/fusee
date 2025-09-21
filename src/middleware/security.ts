@@ -322,6 +322,80 @@ export const validateWithdrawal = (req: Request, res: Response, next: NextFuncti
   next();
 };
 
+// Validate user multisig request
+export const validateUserMultisig = (req: Request, res: Response, next: NextFunction) => {
+  const errors: string[] = [];
+  
+  // Validate name
+  if (!req.body.name || typeof req.body.name !== 'string') {
+    errors.push('Name is required and must be a string');
+  } else if (req.body.name.trim().length === 0) {
+    errors.push('Name cannot be empty');
+  } else if (req.body.name.length > 100) {
+    errors.push('Name cannot exceed 100 characters');
+  }
+  
+  // Validate threshold
+  if (!req.body.threshold || typeof req.body.threshold !== 'number') {
+    errors.push('Threshold is required and must be a number');
+  } else if (req.body.threshold < 1) {
+    errors.push('Threshold must be at least 1');
+  } else if (req.body.threshold > 10) {
+    errors.push('Threshold cannot exceed 10');
+  }
+  
+  // Validate timeLock (optional)
+  if (req.body.timeLock !== undefined) {
+    if (typeof req.body.timeLock !== 'number') {
+      errors.push('TimeLock must be a number');
+    } else if (req.body.timeLock < 0) {
+      errors.push('TimeLock cannot be negative');
+    } else if (req.body.timeLock > 86400) { // 24 hours
+      errors.push('TimeLock cannot exceed 24 hours (86400 seconds)');
+    }
+  }
+  
+  // Validate members
+  if (!req.body.members || !Array.isArray(req.body.members)) {
+    errors.push('Members is required and must be an array');
+  } else if (req.body.members.length === 0) {
+    errors.push('At least one member is required');
+  } else if (req.body.members.length > 20) {
+    errors.push('Cannot have more than 20 members');
+  } else {
+    // Validate each member
+    req.body.members.forEach((member: any, index: number) => {
+      if (!member.publicKey || typeof member.publicKey !== 'string') {
+        errors.push(`Member ${index + 1}: publicKey is required and must be a string`);
+      } else if (member.publicKey.length < 32 || member.publicKey.length > 44) {
+        errors.push(`Member ${index + 1}: publicKey must be a valid Solana public key (32-44 characters)`);
+      }
+      
+      if (!member.permissions || !Array.isArray(member.permissions)) {
+        errors.push(`Member ${index + 1}: permissions is required and must be an array`);
+      } else if (member.permissions.length === 0) {
+        errors.push(`Member ${index + 1}: at least one permission is required`);
+      } else {
+        const validPermissions = ['Proposer', 'Voter', 'Executor'];
+        member.permissions.forEach((permission: string) => {
+          if (!validPermissions.includes(permission)) {
+            errors.push(`Member ${index + 1}: invalid permission '${permission}'. Must be one of: ${validPermissions.join(', ')}`);
+          }
+        });
+      }
+    });
+  }
+  
+  if (errors.length > 0) {
+    return res.status(400).json({
+      message: 'Validation failed',
+      errors: errors
+    });
+  }
+  
+  next();
+};
+
 // Security headers middleware
 export const securityHeaders = (req: Request, res: Response, next: NextFunction) => {
   // Remove X-Powered-By header

@@ -9,6 +9,7 @@ import walletTransferRoutes from './routes/walletTransfers';
 import externalTransferRoutes from './routes/externalTransfers';
 import multisigRoutes from './routes/multisig';
 import signerManagementRoutes from './routes/signerManagement';
+import userMultisigRoutes from './routes/userMultisig';
 import { BackgroundJobs } from './services/backgroundJobs';
 import { 
   helmetMiddleware, 
@@ -98,6 +99,7 @@ app.use('/api/wallet-transfers', verifyCSRFToken, walletTransferRoutes);
 app.use('/api/external-transfers', verifyCSRFToken, externalTransferRoutes);
 app.use('/api/multisig', verifyCSRFToken, multisigRoutes);
 app.use('/api/signer-management', verifyCSRFToken, signerManagementRoutes);
+app.use('/api/users', verifyCSRFToken, userMultisigRoutes);
 
 /**
  * @swagger

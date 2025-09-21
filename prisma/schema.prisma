@@ -18,6 +18,14 @@ model User {
   phoneNumber     String?
   solanaWallet    String   @unique
   balance         Decimal  @default(0) @db.Decimal(18, 8) // User's vault balance
+  
+  // Multisig fields (per-user)
+  multisigPda     String?  @unique // User's personal multisig PDA
+  multisigCreateKey String? @unique // Create key for user's multisig
+  multisigThreshold Int?   // Number of approvals required for this user
+  multisigTimeLock  Int?   @default(0) // Time lock for this user's multisig
+  hasMultisig     Boolean  @default(false) // Whether user has multisig set up
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -27,6 +35,7 @@ model User {
   deposits          Deposit[]  @relation("UserDeposits")
   withdrawals       Withdrawal[] @relation("UserWithdrawals")
   externalTransfers ExternalTransfer[] @relation("UserExternalTransfers")
+  multisigMembers   MultisigMember[] @relation("UserMultisigMembers")
 
   @@map("users")
 }
@@ -237,7 +246,8 @@ model Multisig {
 
 model MultisigMember {
   id            Int      @id @default(autoincrement())
-  multisigId    Int
+  multisigId    Int?     // For global multisig (optional)
+  userId        Int?     // For per-user multisig (optional)
   publicKey     String   @unique // Member's public key
   permissions   String   // JSON string of permissions (Proposer, Voter, Executor)
   isActive      Boolean  @default(true)
@@ -245,7 +255,8 @@ model MultisigMember {
   updatedAt     DateTime @updatedAt
 
   // Relations
-  multisig      Multisig @relation("MultisigMembers", fields: [multisigId], references: [id])
+  multisig      Multisig? @relation("MultisigMembers", fields: [multisigId], references: [id])
+  user          User?     @relation("UserMultisigMembers", fields: [userId], references: [id])
   approvals     MultisigApproval[] @relation("MemberApprovals")
 
   @@map("multisig_members")
