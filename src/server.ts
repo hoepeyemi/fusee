@@ -45,16 +45,23 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    // Specific allowed origins (cleaned up)
+    // Define allowed origins (cleaned up - no extra spaces)
     const allowedOrigins = [
       'http://localhost:3000',
+      'https://yourdomain.com',
       'https://fusee.onrender.com',
       'http://localhost:5173',
       'https://fusee-delta.vercel.app'
     ];
     
-    // Also allow any origin for maximum compatibility
-    console.log('CORS allowing origin:', origin);
+    // Check if origin is in the allowed list
+    if (allowedOrigins.includes(origin)) {
+      console.log('CORS allowing origin:', origin);
+      return callback(null, true);
+    }
+    
+    // Fallback: allow all other origins for maximum compatibility
+    console.log('CORS allowing origin (fallback):', origin);
     callback(null, true);
   },
   credentials: true,
