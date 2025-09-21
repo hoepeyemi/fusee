@@ -39,8 +39,22 @@ app.use(speedLimiter);
 // CORS configuration
 const corsOptions = {
   origin: function (origin: string | undefined, callback: Function) {
-    // Allow all origins - whitelist everything
-    console.log('CORS allowing origin:', origin || 'no origin');
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      console.log('CORS allowing request with no origin');
+      return callback(null, true);
+    }
+    
+    // Specific allowed origins (cleaned up)
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'https://fusee.onrender.com',
+      'http://localhost:5173',
+      'https://fusee-delta.vercel.app'
+    ];
+    
+    // Also allow any origin for maximum compatibility
+    console.log('CORS allowing origin:', origin);
     callback(null, true);
   },
   credentials: true,
