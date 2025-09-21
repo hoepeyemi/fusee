@@ -133,6 +133,7 @@ app.get('/', (req: Request, res: Response) => {
         endpoints: {
           createUser: 'POST /api/users',
           getUser: 'GET /api/users/{id}',
+          deleteUser: 'DELETE /api/users/{id}',
           sendTransfer: 'POST /api/transfers',
           getSentTransfers: 'GET /api/transfers/sender/{senderId}',
           getReceivedTransfers: 'GET /api/transfers/receiver/{receiverId}',
