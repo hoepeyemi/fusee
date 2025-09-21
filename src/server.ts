@@ -82,7 +82,7 @@ app.use(cors(corsOptions));
 
 // Additional CORS fallback for production
 if (process.env.NODE_ENV === 'production') {
-  app.use((req, res, next) => {
+  app.use((req: any, res: any, next: any) => {
     const origin = req.headers.origin;
     if (origin && (origin.includes('render.com') || origin.includes('fusee.onrender.com'))) {
       res.header('Access-Control-Allow-Origin', origin);
