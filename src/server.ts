@@ -39,46 +39,9 @@ app.use(speedLimiter);
 // CORS configuration
 const corsOptions = {
   origin: function (origin: string | undefined, callback: Function) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) {
-      console.log('CORS allowing request with no origin');
-      return callback(null, true);
-    }
-    
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'https://fusee.onrender.com'
-    ];
-    
-    // In production, be more permissive for render.com domains
-    if (process.env.NODE_ENV === 'production') {
-      if (origin.includes('render.com') || origin.includes('fusee.onrender.com')) {
-        console.log('CORS allowing render.com origin:', origin);
-        return callback(null, true);
-      }
-    }
-    
-    // In development, be more permissive for localhost
-    if (process.env.NODE_ENV === 'development') {
-      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        console.log('CORS allowing localhost origin:', origin);
-        return callback(null, true);
-      }
-    }
-    
-    // Log for debugging
-    console.log('CORS checking origin:', origin);
-    console.log('Allowed origins:', allowedOrigins);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
-    
-    if (allowedOrigins.includes(origin)) {
-      console.log('CORS allowing origin:', origin);
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
+    // Allow all origins - whitelist everything
+    console.log('CORS allowing origin:', origin || 'no origin');
+    callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -88,19 +51,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Additional CORS fallback for production
-if (process.env.NODE_ENV === 'production') {
-  app.use((req: any, res: any, next: any) => {
-    const origin = req.headers.origin;
-    if (origin && (origin.includes('render.com') || origin.includes('fusee.onrender.com'))) {
-      res.header('Access-Control-Allow-Origin', origin);
-      res.header('Access-Control-Allow-Credentials', 'true');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, Accept');
-    }
-    next();
-  });
-}
+// CORS is now configured to allow all origins above
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
