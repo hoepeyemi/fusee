@@ -39,10 +39,6 @@ app.use(speedLimiter);
 // CORS configuration
 const corsOptions = {
   origin: function (origin: string | undefined, callback: Function) {
-    // Log for debugging
-    console.log('CORS checking origin:', origin);
-    console.log('NODE_ENV:', process.env.NODE_ENV);
-    
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) {
       console.log('CORS allowing request with no origin');
@@ -55,8 +51,6 @@ const corsOptions = {
       'https://fusee.onrender.com'
     ];
     
-    console.log('Allowed origins:', allowedOrigins);
-    
     // In production, be more permissive for render.com domains
     if (process.env.NODE_ENV === 'production') {
       if (origin.includes('render.com') || origin.includes('fusee.onrender.com')) {
@@ -64,6 +58,11 @@ const corsOptions = {
         return callback(null, true);
       }
     }
+    
+    // Log for debugging
+    console.log('CORS checking origin:', origin);
+    console.log('Allowed origins:', allowedOrigins);
+    console.log('NODE_ENV:', process.env.NODE_ENV);
     
     if (allowedOrigins.includes(origin)) {
       console.log('CORS allowing origin:', origin);
@@ -80,6 +79,20 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Additional CORS fallback for production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && (origin.includes('render.com') || origin.includes('fusee.onrender.com'))) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-CSRF-Token, Accept');
+    }
+    next();
+  });
+}
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
