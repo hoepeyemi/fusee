@@ -45,7 +45,7 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [
       'http://localhost:3000',
       'http://localhost:5173',
       'https://fusee.onrender.com'
@@ -55,6 +55,14 @@ const corsOptions = {
     if (process.env.NODE_ENV === 'production') {
       if (origin.includes('render.com') || origin.includes('fusee.onrender.com')) {
         console.log('CORS allowing render.com origin:', origin);
+        return callback(null, true);
+      }
+    }
+    
+    // In development, be more permissive for localhost
+    if (process.env.NODE_ENV === 'development') {
+      if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+        console.log('CORS allowing localhost origin:', origin);
         return callback(null, true);
       }
     }
