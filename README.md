@@ -1,6 +1,6 @@
 # Fusee Backend
 
-A secure Express.js backend with Prisma, PostgreSQL, and comprehensive security features for Solana wallet integration.
+A secure Express.js backend with Prisma, PostgreSQL, and comprehensive security features for Solana wallet integrat
 
 ## Features
 
