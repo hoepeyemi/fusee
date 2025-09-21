@@ -42,30 +42,17 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(origin => origin.trim()) || [
+    const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [
       'http://localhost:3000',
       'http://localhost:5173',
       'https://fusee.onrender.com'
     ];
     
-    // Log for debugging
-    console.log('CORS checking origin:', origin);
-    console.log('Raw ALLOWED_ORIGINS:', process.env.ALLOWED_ORIGINS);
-    console.log('Parsed allowed origins:', allowedOrigins);
-    
     if (allowedOrigins.includes(origin)) {
-      console.log('CORS allowing origin:', origin);
       callback(null, true);
     } else {
-      // In production, be more permissive for render.com domains and same-origin requests
-      if (process.env.NODE_ENV === 'production' && 
-          (origin?.includes('render.com') || origin?.includes('fusee.onrender.com'))) {
-        console.log('CORS allowing production origin:', origin);
-        callback(null, true);
-      } else {
-        console.log('CORS blocked origin:', origin);
-        callback(new Error('Not allowed by CORS'));
-      }
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,

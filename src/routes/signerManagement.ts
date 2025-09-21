@@ -1,6 +1,5 @@
 import { Router, Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
-import { prisma } from '../lib/prisma';
 import { SignerManagementService } from '../services/signerManagementService';
 
 const router = Router();
