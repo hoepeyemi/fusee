@@ -46,25 +46,50 @@ export class UserMultisigService {
       }
     });
 
-    await Promise.all(
-      config.members.map(member =>
-        prisma.multisigMember.create({
-          data: {
-            userId: config.userId,
-            publicKey: member.publicKey,
-            permissions: JSON.stringify(member.permissions),
-            isActive: true
-          }
-        })
-      )
-    );
+    console.log(`🔐 Multisig created for user ${config.userId}:`);
+    console.log(`   PDA: ${multisigResult.multisigPda}`);
+    console.log(`   Transaction: ${multisigResult.transactionSignature}`);
+    console.log(`   Initial Member (Creator): ${multisigResult.memberPublicKeys[0]}`);
+
+    // Store the creator as the initial member
+    await prisma.multisigMember.create({
+      data: {
+        userId: config.userId,
+        publicKey: multisigResult.memberPublicKeys[0], // Creator's public key
+        permissions: JSON.stringify(['propose', 'vote', 'execute']), // Full permissions for creator
+        isActive: true
+      }
+    });
+
+    // Store additional members from the config (they'll be added later via separate transactions)
+    if (config.members && config.members.length > 0) {
+      await Promise.all(
+        config.members.map(member =>
+          prisma.multisigMember.create({
+            data: {
+              userId: config.userId,
+              publicKey: member.publicKey, // Use the provided public key
+              permissions: JSON.stringify(member.permissions),
+              isActive: true
+            }
+          })
+        )
+      );
+    }
 
     return {
       multisigPda: multisigResult.multisigPda,
       createKey: multisigResult.createKey,
       threshold: config.threshold,
       timeLock: config.timeLock || 0,
-      members: config.members
+      members: [
+        {
+          publicKey: multisigResult.memberPublicKeys[0],
+          permissions: ['propose', 'vote', 'execute']
+        },
+        ...(config.members || [])
+      ],
+      transactionSignature: multisigResult.transactionSignature
     };
   }
 

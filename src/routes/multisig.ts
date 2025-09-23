@@ -117,7 +117,7 @@ router.post('/create', [
       data: {
         multisigPda: result.multisigPda,
         createKey: result.createKey,
-        transaction: result.transaction,
+        transactionSignature: result.transactionSignature,
         multisigId: savedMultisig.id,
       },
     });
