@@ -73,64 +73,67 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', validateUser, handleValidationErrors, async (req: Request, res: Response) => {
-  try {
-    const { email, fullName, phoneNumber, solanaWallet } = req.body;
+router.post(
+  '/',
+  validateUser,
+  handleValidationErrors,
+  async (req: Request, res: Response) => {
+    try {
+      const { email, fullName, phoneNumber, solanaWallet } = req.body;
 
-    // Check if email or wallet already exists
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        OR: [
-          { email },
-          { solanaWallet: solanaWallet as any }
-        ]
+      // Check if email or wallet already exists
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [{ email }, { solanaWallet: solanaWallet as any }],
+        },
+      });
+
+      if (existingUser) {
+        const conflictField =
+          existingUser.email === email ? 'email' : 'Solana wallet';
+        return res.status(409).json({
+          message: `User with this ${conflictField} already exists`,
+          error: 'Conflict',
+        });
       }
-    });
 
-    if (existingUser) {
-      const conflictField = existingUser.email === email ? 'email' : 'Solana wallet';
-      return res.status(409).json({
-        message: `User with this ${conflictField} already exists`,
-        error: 'Conflict'
+      // Extract first name from full name
+      const firstName = fullName.split(' ')[0];
+
+      const user = await prisma.user.create({
+        data: {
+          email,
+          fullName: fullName as any,
+          firstName: firstName as any,
+          phoneNumber,
+          solanaWallet: solanaWallet as any,
+        },
+      });
+
+      // Create or update wallet mapping
+      await prisma.wallet.upsert({
+        where: { firstName: firstName as any },
+        update: {
+          address: solanaWallet as any,
+          isActive: true,
+        },
+        create: {
+          firstName: firstName as any,
+          address: solanaWallet as any,
+          isActive: true,
+        },
+      });
+
+      res.status(201).json(user);
+    } catch (error) {
+      console.error('Error creating user:', error);
+      res.status(500).json({
+        message: 'Failed to create user',
+        error: 'Internal Server Error',
       });
     }
-
-    // Extract first name from full name
-    const firstName = fullName.split(' ')[0];
-
-    const user = await prisma.user.create({
-      data: {
-        email,
-        fullName: fullName as any,
-        firstName: firstName as any,
-        phoneNumber,
-        solanaWallet: solanaWallet as any,
-      },
-    });
-
-    // Create or update wallet mapping
-    await prisma.wallet.upsert({
-      where: { firstName: firstName as any },
-      update: { 
-        address: solanaWallet as any,
-        isActive: true 
-      },
-      create: {
-        firstName: firstName as any,
-        address: solanaWallet as any,
-        isActive: true
-      }
-    });
-
-    res.status(201).json(user);
-  } catch (error) {
-    console.error('Error creating user:', error);
-    res.status(500).json({ 
-      message: 'Failed to create user', 
-      error: 'Internal Server Error' 
-    });
   }
-});
+);
 
 /**
  * @swagger
@@ -177,13 +180,13 @@ router.post('/', validateUser, handleValidationErrors, async (req: Request, res:
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ID is a number
     const userId = parseInt(id);
     if (isNaN(userId) || userId < 1) {
       return res.status(400).json({
         message: 'Invalid user ID. Must be a positive integer.',
-        error: 'Bad Request'
+        error: 'Bad Request',
       });
     }
 
@@ -194,7 +197,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({
         message: 'User not found',
-        error: 'Not Found'
+        error: 'Not Found',
       });
     }
 
@@ -203,7 +206,80 @@ router.get('/:id', async (req: Request, res: Response) => {
     console.error('Error fetching user:', error);
     res.status(500).json({
       message: 'Failed to fetch user',
-      error: 'Internal Server Error'
+      error: 'Internal Server Error',
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/find:
+ *   get:
+ *     summary: Find user by email
+ *     tags: [Users]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: query
+ *         name: email
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: email
+ *         description: User email address
+ *     responses:
+ *       200:
+ *         description: User found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       400:
+ *         description: Invalid email
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/find', async (req: Request, res: Response) => {
+  const { email } = req.query;
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({
+      message: 'Email query parameter is required and must be a string.',
+      error: 'Bad Request',
+    });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found',
+        error: 'Not Found',
+      });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    res.status(500).json({
+      message: 'Failed to find user',
+      error: 'Internal Server Error',
     });
   }
 });
@@ -277,13 +353,13 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     // Validate ID is a number
     const userId = parseInt(id);
     if (isNaN(userId) || userId < 1) {
       return res.status(400).json({
         message: 'Invalid user ID. Must be a positive integer.',
-        error: 'Bad Request'
+        error: 'Bad Request',
       });
     }
 
@@ -295,54 +371,54 @@ router.delete('/:id', async (req: Request, res: Response) => {
         receivedTransfers: true,
         deposits: true,
         withdrawals: true,
-        externalTransfers: true
-      }
+        externalTransfers: true,
+      },
     });
 
     if (!user) {
       return res.status(404).json({
         message: 'User not found',
-        error: 'Not Found'
+        error: 'Not Found',
       });
     }
 
     // Start a transaction to delete all related data
     const result = await prisma.$transaction(async (tx) => {
       // Delete related data in order (respecting foreign key constraints)
-      
+
       // 1. Delete external transfers
       const deletedExternalTransfers = await tx.externalTransfer.deleteMany({
-        where: { userId: userId }
+        where: { userId: userId },
       });
 
       // 2. Delete external fees
       await tx.externalFee.deleteMany({
-        where: { externalTransfer: { userId: userId } }
+        where: { externalTransfer: { userId: userId } },
       });
 
       // 3. Delete wallet transfers (as sender)
       const deletedWalletTransfers = await tx.walletTransfer.deleteMany({
-        where: { fromWallet: user.solanaWallet }
+        where: { fromWallet: user.solanaWallet },
       });
 
       // 4. Delete wallet fees
       await tx.walletFee.deleteMany({
-        where: { 
+        where: {
           OR: [
             { walletTransfer: { fromWallet: user.solanaWallet } },
-            { walletTransfer: { toWallet: user.solanaWallet } }
-          ]
-        }
+            { walletTransfer: { toWallet: user.solanaWallet } },
+          ],
+        },
       });
 
       // 5. Delete transfers (as sender)
       const deletedSentTransfers = await tx.transfer.deleteMany({
-        where: { senderId: userId }
+        where: { senderId: userId },
       });
 
       // 6. Delete transfers (as receiver)
       const deletedReceivedTransfers = await tx.transfer.deleteMany({
-        where: { receiverId: userId }
+        where: { receiverId: userId },
       });
 
       // 7. Delete fees
@@ -350,55 +426,58 @@ router.delete('/:id', async (req: Request, res: Response) => {
         where: {
           OR: [
             { transfer: { senderId: userId } },
-            { transfer: { receiverId: userId } }
-          ]
-        }
+            { transfer: { receiverId: userId } },
+          ],
+        },
       });
 
       // 8. Delete deposits
       const deletedDeposits = await tx.deposit.deleteMany({
-        where: { userId: userId }
+        where: { userId: userId },
       });
 
       // 9. Delete withdrawals
       const deletedWithdrawals = await tx.withdrawal.deleteMany({
-        where: { userId: userId }
+        where: { userId: userId },
       });
 
       // 10. Delete wallet mapping
       const deletedWallet = await tx.wallet.deleteMany({
-        where: { firstName: user.firstName }
+        where: { firstName: user.firstName },
       });
 
       // 11. Finally, delete the user
       const deletedUser = await tx.user.delete({
-        where: { id: userId }
+        where: { id: userId },
       });
 
       return {
         deletedUser,
         deletedData: {
-          wallet: deletedWallet.count > 0 ? { firstName: user.firstName, address: user.solanaWallet } : null,
-          transfers: deletedSentTransfers.count + deletedReceivedTransfers.count,
+          wallet:
+            deletedWallet.count > 0
+              ? { firstName: user.firstName, address: user.solanaWallet }
+              : null,
+          transfers:
+            deletedSentTransfers.count + deletedReceivedTransfers.count,
           deposits: deletedDeposits.count,
           withdrawals: deletedWithdrawals.count,
           externalTransfers: deletedExternalTransfers.count,
-          walletTransfers: deletedWalletTransfers.count
-        }
+          walletTransfers: deletedWalletTransfers.count,
+        },
       };
     });
 
     res.json({
       message: 'User deleted successfully',
       deletedUser: result.deletedUser,
-      deletedData: result.deletedData
+      deletedData: result.deletedData,
     });
-
   } catch (error) {
     console.error('Error deleting user:', error);
     res.status(500).json({
       message: 'Failed to delete user',
-      error: 'Internal Server Error'
+      error: 'Internal Server Error',
     });
   }
 });
