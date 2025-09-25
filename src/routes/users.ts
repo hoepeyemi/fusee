@@ -137,6 +137,79 @@ router.post(
 
 /**
  * @swagger
+ * /api/users/find:
+ *   get:
+ *     summary: Find user by email
+ *     tags: [Users]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: query
+ *         name: email
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: email
+ *         description: User email address
+ *     responses:
+ *       200:
+ *         description: User found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       400:
+ *         description: Invalid email
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/find', async (req: Request, res: Response) => {
+  const { email } = req.query;
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({
+      message: 'Email query parameter is required and must be a string.',
+      error: 'Bad Request',
+    });
+  }
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found',
+        error: 'Not Found',
+      });
+    }
+
+    res.json(user);
+  } catch (error) {
+    console.error('Error finding user by email:', error);
+    res.status(500).json({
+      message: 'Failed to find user',
+      error: 'Internal Server Error',
+    });
+  }
+});
+
+/**
+ * @swagger
  * /api/users/{id}:
  *   get:
  *     summary: Get user details by ID
@@ -206,79 +279,6 @@ router.get('/:id', async (req: Request, res: Response) => {
     console.error('Error fetching user:', error);
     res.status(500).json({
       message: 'Failed to fetch user',
-      error: 'Internal Server Error',
-    });
-  }
-});
-
-/**
- * @swagger
- * /api/users/find:
- *   get:
- *     summary: Find user by email
- *     tags: [Users]
- *     security:
- *       - csrf: []
- *     parameters:
- *       - in: query
- *         name: email
- *         required: true
- *         schema:
- *           type: string
- *           format: email
- *         description: User email address
- *     responses:
- *       200:
- *         description: User found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/User'
- *       404:
- *         description: User not found
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       400:
- *         description: Invalid email
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- *       500:
- *         description: Internal server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
- */
-router.get('/find', async (req: Request, res: Response) => {
-  const { email } = req.query;
-  if (!email || typeof email !== 'string') {
-    return res.status(400).json({
-      message: 'Email query parameter is required and must be a string.',
-      error: 'Bad Request',
-    });
-  }
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        message: 'User not found',
-        error: 'Not Found',
-      });
-    }
-
-    res.json(user);
-  } catch (error) {
-    console.error('Error finding user by email:', error);
-    res.status(500).json({
-      message: 'Failed to find user',
       error: 'Internal Server Error',
     });
   }
