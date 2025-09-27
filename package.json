@@ -11,7 +11,12 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
-    "db:seed": "ts-node prisma/seed.ts"
+    "db:seed": "ts-node prisma/seed.ts",
+    "db:clean": "node scripts/delete-all-tables.js",
+    "db:clean:confirm": "node scripts/delete-all-tables.js --confirm",
+    "db:clean:dry": "node scripts/delete-all-tables.js --dry-run",
+    "db:clean:drop": "node scripts/delete-all-tables.js --confirm --drop-tables",
+    "db:clean:test": "node scripts/test-cleanup.js"
   },
   "keywords": [],
   "author": "",
