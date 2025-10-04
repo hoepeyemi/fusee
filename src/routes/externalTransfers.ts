@@ -1,6 +1,9 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import ExternalTransferService from '../services/externalTransferService';
+import { MultisigTransferService } from '../services/multisigTransferService';
+import { OnDemandMultisigService } from '../services/onDemandMultisigService';
+import { Connection } from '@solana/web3.js';
 
 const router = Router();
 
@@ -98,7 +101,7 @@ const router = Router();
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { userId, toExternalWallet, amount, currency = 'SOL', notes } = req.body;
+    const { userId, toExternalWallet, amount, currency = 'SOL', notes, requestedBy } = req.body;
 
     // Validate input
     if (!userId || !toExternalWallet || !amount) {
@@ -107,6 +110,91 @@ router.post('/', async (req: Request, res: Response) => {
         error: 'Bad Request',
         required: ['userId', 'toExternalWallet', 'amount']
       });
+    }
+
+    // Get user's wallet address
+    const senderUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { solanaWallet: true, hasMultisig: true }
+    });
+
+    if (!senderUser) {
+      return res.status(404).json({
+        message: 'User not found',
+        error: 'Not Found'
+      });
+    }
+
+    if (!senderUser.solanaWallet) {
+      return res.status(400).json({
+        message: 'User does not have a wallet address',
+        error: 'Bad Request'
+      });
+    }
+
+    // Check if transfer requires multisig approval
+    const requiresMultisigApproval = await MultisigTransferService.requiresMultisigApproval(
+      senderUser.solanaWallet,
+      toExternalWallet
+    );
+
+    if (requiresMultisigApproval) {
+      // If requestedBy is not provided, return error
+      if (!requestedBy) {
+        return res.status(400).json({
+          message: 'External transfer requires multisig approval',
+          error: 'Multisig Required',
+          details: 'This external transfer requires multisig approval. Please provide requestedBy field.',
+          requiresMultisig: true,
+          multisigEndpoint: '/api/multisig-transfers/propose'
+        });
+      }
+
+      // Ensure user has multisig (create on-demand if needed)
+      try {
+        const multisigResult = await OnDemandMultisigService.ensureUserMultisig(userId);
+        
+        if (multisigResult.isNewMultisig) {
+          console.log(`🆕 Created new multisig for user ${userId} on first external transfer`);
+        }
+      } catch (multisigError) {
+        console.error('Error ensuring user multisig:', multisigError);
+        return res.status(500).json({
+          message: 'Failed to set up multisig for user',
+          error: 'Multisig Setup Failed',
+          details: multisigError instanceof Error ? multisigError.message : 'Unknown error'
+        });
+      }
+
+      // Create multisig transfer proposal
+      try {
+        const proposal = await MultisigTransferService.createTransferProposal({
+          fromWallet: senderUser.solanaWallet,
+          toWallet: toExternalWallet,
+          amount: parseFloat(amount),
+          currency,
+          notes,
+          requestedBy
+        });
+
+        return res.status(202).json({
+          message: 'External transfer proposal created successfully',
+          success: true,
+          requiresMultisig: true,
+          data: {
+            proposalId: proposal.id,
+            status: proposal.status,
+            message: 'External transfer requires multisig approval before execution'
+          }
+        });
+      } catch (proposalError) {
+        console.error('Error creating multisig transfer proposal:', proposalError);
+        return res.status(500).json({
+          message: 'Failed to create transfer proposal',
+          error: 'Proposal Creation Failed',
+          details: proposalError instanceof Error ? proposalError.message : 'Unknown error'
+        });
+      }
     }
 
     // Validate amount
@@ -145,12 +233,12 @@ router.post('/', async (req: Request, res: Response) => {
     }
 
     // Get user's wallet address
-    const user = await prisma.user.findUnique({
+    const transferUser = await prisma.user.findUnique({
       where: { id: userId },
       select: { solanaWallet: true, fullName: true }
     });
 
-    if (!user) {
+    if (!transferUser) {
       return res.status(404).json({
         message: 'User not found',
         error: 'Not Found'
@@ -160,7 +248,7 @@ router.post('/', async (req: Request, res: Response) => {
     // Process external transfer
     const result = await ExternalTransferService.processExternalTransfer(
       userId,
-      user.solanaWallet,
+      transferUser.solanaWallet,
       toExternalWallet,
       transferAmount,
       currency,
@@ -173,7 +261,7 @@ router.post('/', async (req: Request, res: Response) => {
         : 'External transfer completed successfully',
       transferId: result.transferId,
       userId,
-      fromWallet: user.solanaWallet,
+      fromWallet: transferUser.solanaWallet,
       toExternalWallet,
       amount: transferAmount,
       fee: result.fee,
@@ -683,6 +771,205 @@ router.post('/:transferId/execute-multisig', async (req: Request, res: Response)
       success: false,
       message: 'Internal server error',
       error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/external-transfers/real-fees:
+ *   post:
+ *     summary: Transfer cryptocurrency to external wallet with real fee transactions to treasury
+ *     tags: [External Transfers]
+ *     security:
+ *       - csrf: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - fromWallet
+ *               - toExternalWallet
+ *               - amount
+ *             properties:
+ *               userId:
+ *                 type: integer
+ *                 description: User ID making the transfer
+ *                 example: 1
+ *               fromWallet:
+ *                 type: string
+ *                 description: Source wallet address
+ *                 example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+ *               toExternalWallet:
+ *                 type: string
+ *                 description: External destination wallet address
+ *                 example: "ExternalWallet1234567890123456789012345678901234567890"
+ *               amount:
+ *                 type: number
+ *                 format: decimal
+ *                 description: Amount to transfer
+ *                 example: 1.5
+ *               currency:
+ *                 type: string
+ *                 description: Currency type - default SOL
+ *                 example: "SOL"
+ *               notes:
+ *                 type: string
+ *                 description: Optional transfer notes
+ *                 example: "Payment for services"
+ *     responses:
+ *       201:
+ *         description: External transfer completed with real fee transaction
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 transferId:
+ *                   type: integer
+ *                 fee:
+ *                   type: number
+ *                 netAmount:
+ *                   type: number
+ *                 treasuryAddress:
+ *                   type: string
+ *                 feeTransactionHash:
+ *                   type: string
+ *                 mainTransactionHash:
+ *                   type: string
+ *       400:
+ *         description: Bad request - validation errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/real-fees', async (req: Request, res: Response) => {
+  try {
+    const { userId, fromWallet, toExternalWallet, amount, currency = 'SOL', notes } = req.body;
+
+    // Validate input
+    if (!userId || !fromWallet || !toExternalWallet || !amount) {
+      return res.status(400).json({
+        message: 'Missing required fields',
+        error: 'Bad Request',
+        required: ['userId', 'fromWallet', 'toExternalWallet', 'amount']
+      });
+    }
+
+    // Validate amount
+    const transferAmount = parseFloat(amount);
+    if (isNaN(transferAmount) || transferAmount <= 0) {
+      return res.status(400).json({
+        message: 'Amount must be a positive number',
+        error: 'Bad Request'
+      });
+    }
+
+    if (transferAmount > 1000000) {
+      return res.status(400).json({
+        message: 'Amount cannot exceed 1,000,000',
+        error: 'Bad Request'
+      });
+    }
+
+    // Create Solana connection
+    const connection = new Connection(
+      process.env.RPC_URL || 'https://api.devnet.solana.com',
+      'confirmed'
+    );
+
+    // Create external transfer proposal for multisig approval
+    const result = await ExternalTransferService.createExternalTransferProposal(
+      parseInt(userId),
+      fromWallet,
+      toExternalWallet,
+      transferAmount,
+      currency,
+      notes
+    );
+
+    res.status(202).json({
+      message: 'External transfer proposal created successfully',
+      proposalId: result.proposalId,
+      multisigPda: result.multisigPda,
+      transactionIndex: result.transactionIndex,
+      status: result.status,
+      fee: result.fee,
+      netAmount: result.netAmount,
+      currency: currency,
+      note: 'Transfer is pending multisig approval'
+    });
+
+  } catch (error) {
+    console.error('Error processing external transfer with real fees:', error);
+    
+    // Handle specific error types
+    if (error instanceof Error) {
+      if (error.message.includes('Validation error:')) {
+        return res.status(400).json({
+          message: 'Validation failed',
+          error: 'Bad Request',
+          details: error.message.replace('Validation error: ', '')
+        });
+      }
+      
+      if (error.message.includes('Multisig service error:')) {
+        return res.status(503).json({
+          message: 'Multisig service unavailable',
+          error: 'Service Unavailable',
+          details: error.message.replace('Multisig service error: ', '')
+        });
+      }
+      
+      if (error.message.includes('Database error:')) {
+        return res.status(500).json({
+          message: 'Database error',
+          error: 'Internal Server Error',
+          details: 'Please try again later'
+        });
+      }
+      
+      if (error.message.includes('No main multisig found')) {
+        return res.status(503).json({
+          message: 'Multisig not configured',
+          error: 'Service Unavailable',
+          details: 'Please contact administrator to set up multisig'
+        });
+      }
+      
+      if (error.message.includes('User not found')) {
+        return res.status(404).json({
+          message: 'User not found',
+          error: 'Not Found',
+          details: 'Please check your user ID'
+        });
+      }
+      
+      if (error.message.includes('Failed to send fee to treasury')) {
+        return res.status(500).json({
+          message: 'Failed to send fee to treasury',
+          error: 'Fee Transaction Failed',
+          details: error.message
+        });
+      }
+    }
+    
+    res.status(500).json({
+      message: 'Failed to process external transfer',
+      error: 'Internal Server Error',
+      details: error instanceof Error ? error.message : 'Unknown error occurred'
     });
   }
 });

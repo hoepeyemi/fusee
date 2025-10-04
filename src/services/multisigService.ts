@@ -2,6 +2,8 @@ import * as multisig from "@sqds/multisig";
 import { Connection, Keypair, PublicKey, TransactionMessage, LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { prisma } from "../lib/prisma";
 import { SignerManagementService } from "./signerManagementService";
+import { getMultisigConfig, validatePrivateKeys } from "../config/environment";
+import { adminInactivityService } from "./adminInactivityService";
 
 export interface MultisigConfig {
   rpcUrl: string;
@@ -27,6 +29,7 @@ export class MultisigService {
   private connection: Connection;
   private multisigPda?: PublicKey;
   private createKey?: PublicKey;
+  private createKeypair?: Keypair;
   private threshold: number;
   private timeLock: number;
   private members: Array<{ publicKey: string; permissions: string[] }>;
@@ -54,11 +57,16 @@ export class MultisigService {
     transactionSignature: string;
     memberPublicKeys: string[];
   }> {
-    // Import Keypair at the top of the method
+    // Import Keypair and bs58 at the top of the method
     const { Keypair } = await import('@solana/web3.js');
+    const bs58 = await import('bs58');
     
     if (!this.createKey) {
-      this.createKey = Keypair.generate().publicKey;
+      // Generate a keypair for the createKey, not just a public key
+      const createKeypair = Keypair.generate();
+      this.createKey = createKeypair.publicKey;
+      // Store the keypair for signing
+      this.createKeypair = createKeypair;
     }
 
     const [multisigPda] = multisig.getMultisigPda({
@@ -70,36 +78,70 @@ export class MultisigService {
     // Program config will be fetched in the instruction creation below
 
     // For multisig creation, we need at least 2 members
-    // Let's create with creator + one specific additional member
+    // Use the configured private keys from environment variables
     const { Permission, Permissions } = multisig.types;
     
-    // Generate a new keypair for the additional member
-    // We'll use the generated public key instead of trying to match a specific one
-    const additionalMemberKeypair = Keypair.generate();
+    // Load multisig configuration from environment variables
+    const multisigConfig = getMultisigConfig();
     
-    console.log('🔍 Generated keypair for additional member:');
-    console.log(`   Generated public key: ${additionalMemberKeypair.publicKey.toString()}`);
-    console.log(`   This will be used as the second member of the multisig`);
+    // Validate the private keys
+    if (!validatePrivateKeys(multisigConfig)) {
+      throw new Error('Invalid multisig member private keys in configuration');
+    }
+    
+    // Create keypairs from the configured private keys
+    const member1Keypair = Keypair.fromSecretKey(bs58.default.decode(multisigConfig.member1PrivateKey));
+    const member2Keypair = Keypair.fromSecretKey(bs58.default.decode(multisigConfig.member2PrivateKey));
+    
+    console.log('🔍 Using configured private keys for multisig members:');
+    console.log(`   Member 1 public key: ${member1Keypair.publicKey.toString()}`);
+    console.log(`   Member 2 public key: ${member2Keypair.publicKey.toString()}`);
+    
+    // Add third member if provided
+    let member3Keypair: Keypair | null = null;
+    if (multisigConfig.member3PrivateKey) {
+      member3Keypair = Keypair.fromSecretKey(bs58.default.decode(multisigConfig.member3PrivateKey));
+      console.log(`   Member 3 public key: ${member3Keypair.publicKey.toString()}`);
+    }
+    
+    const memberCount = 2 + (member3Keypair ? 1 : 0);
+    console.log(`   Total members: ${memberCount} (Min: ${multisigConfig.minMembers}, Max: ${multisigConfig.maxMembers})`);
+    console.log(`   Source: Environment variables (MULTISIG_MEMBER_1_PRIVATE_KEY, MULTISIG_MEMBER_2_PRIVATE_KEY${member3Keypair ? ', MULTISIG_MEMBER_3_PRIVATE_KEY' : ''})`);
+    console.log(`   These will be used as the ${memberCount} members of the multisig`);
     
     const members = [
       {
-        key: creator.publicKey, // Creator is the first member
-        permissions: this.convertPermissions(['propose', 'vote', 'execute']), // Full permissions for creator
+        key: member1Keypair.publicKey, // First member from private key
+        permissions: this.convertPermissions(['propose', 'vote', 'execute']), // Full admin permissions for member 1
       },
       {
-        key: additionalMemberKeypair.publicKey, // Additional member
-        permissions: this.convertPermissions(['vote']), // Basic voting permissions
+        key: member2Keypair.publicKey, // Second member from private key
+        permissions: this.convertPermissions(['propose', 'vote', 'execute']), // Full admin permissions for member 2
       }
     ];
     
-    // Set threshold to 1 (any one member can sign)
-    const initialThreshold = 1;
+    // Add third member if provided
+    if (member3Keypair) {
+      members.push({
+        key: member3Keypair.publicKey, // Third member from private key
+        permissions: this.convertPermissions(['propose', 'vote', 'execute']), // Full admin permissions for member 3
+      });
+    }
     
-    console.log('🔑 Creating multisig with 2 members:');
-    console.log(`   Creator/Member 1: ${creator.publicKey.toString()}`);
-    console.log(`   Additional Member 2: ${additionalMemberKeypair.publicKey.toString()}`);
-    console.log(`   Threshold: ${initialThreshold} (any one member can sign)`);
-    console.log(`   TimeLock: ${this.timeLock}`);
+    // Set threshold to require all members to approve (but any one can execute)
+    // If defaultThreshold is 0, use member count (all must approve)
+    // Otherwise, use the configured threshold
+    const initialThreshold = multisigConfig.defaultThreshold === 0 ? memberCount : multisigConfig.defaultThreshold;
+    
+    console.log(`🔑 Creating multisig with ${memberCount} members:`);
+    console.log(`   Creator/Member 1: ${member1Keypair.publicKey.toString()}`);
+    console.log(`   Member 2: ${member2Keypair.publicKey.toString()}`);
+    if (member3Keypair) {
+      console.log(`   Member 3: ${member3Keypair.publicKey.toString()}`);
+    }
+    console.log(`   Threshold: ${initialThreshold} (all ${memberCount} members must approve)`);
+    console.log(`   Execution: Any one member can execute after approval`);
+    console.log(`   TimeLock: ${multisigConfig.defaultTimeLock}`);
 
     // Use multisigCreateV2 as shown in the guide
     const programConfigPda = multisig.getProgramConfigPda({})[0];
@@ -110,12 +152,13 @@ export class MultisigService {
     const configTreasury = programConfig.treasury;
 
     // Use multisigCreateV2 instruction
+    // Use member1Keypair as the creator since we're using provided private keys
     const instruction = await multisig.instructions.multisigCreateV2({
       createKey: this.createKey,
-      creator: creator.publicKey,
+      creator: member1Keypair.publicKey, // Use member1 as creator
       multisigPda,
       configAuthority: null,
-      timeLock: this.timeLock,
+      timeLock: multisigConfig.defaultTimeLock,
       members,
       threshold: initialThreshold, // Use adjusted threshold
       treasury: configTreasury,
@@ -130,7 +173,7 @@ export class MultisigService {
     // Get recent blockhash
     const { blockhash } = await this.connection.getLatestBlockhash();
     transaction.recentBlockhash = blockhash;
-    transaction.feePayer = creator.publicKey;
+    transaction.feePayer = member1Keypair.publicKey; // Use member 1 as fee payer (matches creator)
     
     console.log('📋 Transaction details:');
     console.log(`   Fee Payer: ${transaction.feePayer?.toString()}`);
@@ -150,22 +193,27 @@ export class MultisigService {
       console.log('💰 Checking signer balances and airdropping SOL...');
       const { LAMPORTS_PER_SOL } = await import('@solana/web3.js');
       
-      // Check creator balance
-      const creatorBalance = await this.connection.getBalance(creator.publicKey);
-      console.log(`🔍 Creator balance: ${creatorBalance / LAMPORTS_PER_SOL} SOL (${creatorBalance} lamports)`);
-      console.log(`   Creator address: ${creator.publicKey.toString()}`);
+      // Check member 1 balance
+      const member1Balance = await this.connection.getBalance(member1Keypair.publicKey);
+      console.log(`🔍 Member 1 balance: ${member1Balance / LAMPORTS_PER_SOL} SOL (${member1Balance} lamports)`);
+      console.log(`   Member 1 address: ${member1Keypair.publicKey.toString()}`);
       
-      // Check additional member balance
-      const additionalMemberBalance = await this.connection.getBalance(additionalMemberKeypair.publicKey);
-      console.log(`🔍 Additional member balance: ${additionalMemberBalance / LAMPORTS_PER_SOL} SOL (${additionalMemberBalance} lamports)`);
-      console.log(`   Additional member address: ${additionalMemberKeypair.publicKey.toString()}`);
+      // Check member 2 balance
+      const member2Balance = await this.connection.getBalance(member2Keypair.publicKey);
+      console.log(`🔍 Member 2 balance: ${member2Balance / LAMPORTS_PER_SOL} SOL (${member2Balance} lamports)`);
+      console.log(`   Member 2 address: ${member2Keypair.publicKey.toString()}`);
       
-      // Airdrop to creator if balance is low
-      if (creatorBalance < 0.1 * LAMPORTS_PER_SOL) {
-        console.log('💰 Creator has insufficient SOL, requesting airdrop...');
+      // Check createKey balance
+      const createKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
+      console.log(`🔍 CreateKey balance: ${createKeyBalance / LAMPORTS_PER_SOL} SOL (${createKeyBalance} lamports)`);
+      console.log(`   CreateKey address: ${this.createKeypair!.publicKey.toString()}`);
+      
+      // Airdrop to member 1 if balance is low
+      if (member1Balance < 0.1 * LAMPORTS_PER_SOL) {
+        console.log('💰 Member 1 has insufficient SOL, requesting airdrop...');
         try {
-          const airdropSignature = await this.connection.requestAirdrop(creator.publicKey, 2 * LAMPORTS_PER_SOL);
-          console.log(`✅ Airdrop transaction sent for creator: ${airdropSignature}`);
+          const airdropSignature = await this.connection.requestAirdrop(member1Keypair.publicKey, 2 * LAMPORTS_PER_SOL);
+          console.log(`✅ Airdrop transaction sent for member 1: ${airdropSignature}`);
           
           // Wait for confirmation with retries
           let confirmed = false;
@@ -182,7 +230,7 @@ export class MultisigService {
                 continue;
               }
               confirmed = true;
-              console.log(`✅ Airdrop confirmed for creator after ${retries + 1} attempts`);
+              console.log(`✅ Airdrop confirmed for member 1 after ${retries + 1} attempts`);
             } catch (e) {
               console.log(`⚠️ Airdrop confirmation failed (retry ${retries + 1}):`, e);
               retries++;
@@ -191,28 +239,28 @@ export class MultisigService {
           }
           
           if (!confirmed) {
-            throw new Error(`Failed to confirm airdrop for creator after ${maxRetries} attempts`);
+            throw new Error(`Failed to confirm airdrop for member 1 after ${maxRetries} attempts`);
           }
           
           // Wait a bit more for the balance to update
           await new Promise(resolve => setTimeout(resolve, 3000));
           
-          const newCreatorBalance = await this.connection.getBalance(creator.publicKey);
-          console.log(`✅ Creator new balance: ${newCreatorBalance / LAMPORTS_PER_SOL} SOL (${newCreatorBalance} lamports)`);
+          const newMember1Balance = await this.connection.getBalance(member1Keypair.publicKey);
+          console.log(`✅ Member 1 new balance: ${newMember1Balance / LAMPORTS_PER_SOL} SOL (${newMember1Balance} lamports)`);
         } catch (e) {
-          console.log('❌ Airdrop to creator failed:', e);
-          throw new Error(`Failed to airdrop SOL to creator ${creator.publicKey.toString()}: ${e}`);
+          console.log('❌ Airdrop to member 1 failed:', e);
+          throw new Error(`Failed to airdrop SOL to member 1 ${member1Keypair.publicKey.toString()}: ${e}`);
         }
       } else {
-        console.log('✅ Creator has sufficient SOL');
+        console.log('✅ Member 1 has sufficient SOL');
       }
 
-      // Airdrop to additional member if balance is low
-      if (additionalMemberBalance < 0.1 * LAMPORTS_PER_SOL) {
-        console.log('💰 Additional member has insufficient SOL, requesting airdrop...');
+      // Airdrop to member 2 if balance is low
+      if (member2Balance < 0.1 * LAMPORTS_PER_SOL) {
+        console.log('💰 Member 2 has insufficient SOL, requesting airdrop...');
         try {
-          const airdropSignature = await this.connection.requestAirdrop(additionalMemberKeypair.publicKey, 2 * LAMPORTS_PER_SOL);
-          console.log(`✅ Airdrop transaction sent for additional member: ${airdropSignature}`);
+          const airdropSignature = await this.connection.requestAirdrop(member2Keypair.publicKey, 2 * LAMPORTS_PER_SOL);
+          console.log(`✅ Airdrop transaction sent for member 2: ${airdropSignature}`);
           
           // Wait for confirmation with retries
           let confirmed = false;
@@ -229,7 +277,7 @@ export class MultisigService {
                 continue;
               }
               confirmed = true;
-              console.log(`✅ Airdrop confirmed for additional member after ${retries + 1} attempts`);
+              console.log(`✅ Airdrop confirmed for member 2 after ${retries + 1} attempts`);
             } catch (e) {
               console.log(`⚠️ Airdrop confirmation failed (retry ${retries + 1}):`, e);
               retries++;
@@ -238,63 +286,261 @@ export class MultisigService {
           }
           
           if (!confirmed) {
-            throw new Error(`Failed to confirm airdrop for additional member after ${maxRetries} attempts`);
+            throw new Error(`Failed to confirm airdrop for member 2 after ${maxRetries} attempts`);
           }
           
           // Wait a bit more for the balance to update
           await new Promise(resolve => setTimeout(resolve, 3000));
           
-          const newAdditionalMemberBalance = await this.connection.getBalance(additionalMemberKeypair.publicKey);
-          console.log(`✅ Additional member new balance: ${newAdditionalMemberBalance / LAMPORTS_PER_SOL} SOL (${newAdditionalMemberBalance} lamports)`);
+          const newMember2Balance = await this.connection.getBalance(member2Keypair.publicKey);
+          console.log(`✅ Member 2 new balance: ${newMember2Balance / LAMPORTS_PER_SOL} SOL (${newMember2Balance} lamports)`);
         } catch (e) {
-          console.log('❌ Airdrop to additional member failed:', e);
-          throw new Error(`Failed to airdrop SOL to additional member ${additionalMemberKeypair.publicKey.toString()}: ${e}`);
+          console.log('❌ Airdrop to member 2 failed:', e);
+          throw new Error(`Failed to airdrop SOL to member 2 ${member2Keypair.publicKey.toString()}: ${e}`);
         }
       } else {
-        console.log('✅ Additional member has sufficient SOL');
+        console.log('✅ Member 2 has sufficient SOL');
+      }
+
+      // Check member 3 balance if provided
+      if (member3Keypair) {
+        const member3Balance = await this.connection.getBalance(member3Keypair.publicKey);
+        console.log(`🔍 Member 3 balance: ${member3Balance / LAMPORTS_PER_SOL} SOL (${member3Balance} lamports)`);
+        console.log(`   Member 3 address: ${member3Keypair.publicKey.toString()}`);
+        
+        // Airdrop to member 3 if balance is low
+        if (member3Balance < 0.1 * LAMPORTS_PER_SOL) {
+          console.log('💰 Member 3 has insufficient SOL, requesting airdrop...');
+          try {
+            const airdropSignature = await this.connection.requestAirdrop(member3Keypair.publicKey, 2 * LAMPORTS_PER_SOL);
+            console.log(`✅ Airdrop transaction sent for member 3: ${airdropSignature}`);
+            
+            // Wait for confirmation with retries
+            let confirmed = false;
+            let retries = 0;
+            const maxRetries = 10;
+            
+            while (!confirmed && retries < maxRetries) {
+              try {
+                const confirmation = await this.connection.confirmTransaction(airdropSignature, 'confirmed');
+                if (confirmation.value.err) {
+                  console.log(`⚠️ Airdrop confirmation error (retry ${retries + 1}):`, confirmation.value.err);
+                  retries++;
+                  await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+                  continue;
+                }
+                confirmed = true;
+                console.log(`✅ Airdrop confirmed for member 3 after ${retries + 1} attempts`);
+              } catch (e) {
+                console.log(`⚠️ Airdrop confirmation failed (retry ${retries + 1}):`, e);
+                retries++;
+                await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+              }
+            }
+            
+            if (!confirmed) {
+              throw new Error(`Failed to confirm airdrop for member 3 after ${maxRetries} attempts`);
+            }
+            
+            // Wait a bit more for the balance to update
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            const newMember3Balance = await this.connection.getBalance(member3Keypair.publicKey);
+            console.log(`✅ Member 3 new balance: ${newMember3Balance / LAMPORTS_PER_SOL} SOL (${newMember3Balance} lamports)`);
+          } catch (e) {
+            console.log('❌ Airdrop to member 3 failed:', e);
+            throw new Error(`Failed to airdrop SOL to member 3 ${member3Keypair.publicKey.toString()}: ${e}`);
+          }
+        } else {
+          console.log('✅ Member 3 has sufficient SOL');
+        }
+      }
+
+      // Airdrop to createKey if balance is low
+      if (createKeyBalance < 0.1 * LAMPORTS_PER_SOL) {
+        console.log('💰 CreateKey has insufficient SOL, requesting airdrop...');
+        console.log(`   CreateKey address: ${this.createKeypair!.publicKey.toString()}`);
+        
+        let airdropSuccess = false;
+        let airdropRetries = 0;
+        const maxAirdropRetries = 3;
+        
+        while (!airdropSuccess && airdropRetries < maxAirdropRetries) {
+          try {
+            console.log(`🔄 Airdrop attempt ${airdropRetries + 1}/${maxAirdropRetries}...`);
+            
+            // Try smaller airdrop amounts first
+            const airdropAmount = airdropRetries === 0 ? 1 * LAMPORTS_PER_SOL : 2 * LAMPORTS_PER_SOL;
+            const airdropSignature = await this.connection.requestAirdrop(this.createKeypair!.publicKey, airdropAmount);
+            console.log(`✅ Airdrop transaction sent for createKey: ${airdropSignature}`);
+            
+            // Wait for confirmation with retries
+            let confirmed = false;
+            let confirmationRetries = 0;
+            const maxConfirmationRetries = 5;
+            
+            while (!confirmed && confirmationRetries < maxConfirmationRetries) {
+              try {
+                const confirmation = await this.connection.confirmTransaction(airdropSignature, 'confirmed');
+                if (confirmation.value.err) {
+                  console.log(`⚠️ Airdrop confirmation error (retry ${confirmationRetries + 1}):`, confirmation.value.err);
+                  confirmationRetries++;
+                  await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+                  continue;
+                }
+                confirmed = true;
+                console.log(`✅ Airdrop confirmed for createKey after ${confirmationRetries + 1} attempts`);
+              } catch (e) {
+                console.log(`⚠️ Airdrop confirmation failed (retry ${confirmationRetries + 1}):`, e);
+                confirmationRetries++;
+                await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+              }
+            }
+            
+            if (confirmed) {
+              // Wait a bit more for the balance to update
+              await new Promise(resolve => setTimeout(resolve, 2000));
+              
+              const newCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
+              console.log(`✅ CreateKey new balance: ${newCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${newCreateKeyBalance} lamports)`);
+              
+              if (newCreateKeyBalance >= 0.01 * LAMPORTS_PER_SOL) {
+                airdropSuccess = true;
+              } else {
+                console.log(`⚠️ Airdrop completed but balance still low: ${newCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
+                airdropRetries++;
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+              }
+            } else {
+              console.log(`❌ Airdrop confirmation failed after ${maxConfirmationRetries} attempts`);
+              airdropRetries++;
+              await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+            }
+          } catch (e) {
+            console.log(`❌ Airdrop attempt ${airdropRetries + 1} failed:`, e.message);
+            airdropRetries++;
+            
+            if (airdropRetries < maxAirdropRetries) {
+              console.log(`⏳ Waiting 10 seconds before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 seconds before retry
+            }
+          }
+        }
+        
+        if (!airdropSuccess) {
+          console.log('⚠️ All airdrop attempts failed. Trying alternative approach...');
+          
+          // Alternative: Transfer SOL from member1 to createKey
+          try {
+            console.log('💸 Transferring SOL from Member 1 to CreateKey...');
+            const { SystemProgram, Transaction, sendAndConfirmTransaction } = await import('@solana/web3.js');
+            
+            const transferAmount = 0.1 * LAMPORTS_PER_SOL; // Transfer 0.1 SOL
+            const transferInstruction = SystemProgram.transfer({
+              fromPubkey: member1Keypair.publicKey,
+              toPubkey: this.createKeypair!.publicKey,
+              lamports: transferAmount,
+            });
+            
+            const transferTransaction = new Transaction().add(transferInstruction);
+            const { blockhash } = await this.connection.getLatestBlockhash();
+            transferTransaction.recentBlockhash = blockhash;
+            transferTransaction.feePayer = member1Keypair.publicKey;
+            
+            const transferSignature = await sendAndConfirmTransaction(
+              this.connection,
+              transferTransaction,
+              [member1Keypair],
+              { commitment: 'confirmed' }
+            );
+            
+            console.log(`✅ SOL transfer successful: ${transferSignature}`);
+            
+            // Wait for balance to update
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            const finalCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
+            console.log(`✅ CreateKey final balance: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${finalCreateKeyBalance} lamports)`);
+            
+            if (finalCreateKeyBalance < 0.01 * LAMPORTS_PER_SOL) {
+              throw new Error(`CreateKey still has insufficient SOL after transfer: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
+            }
+          } catch (transferError) {
+            console.log('❌ SOL transfer also failed:', transferError.message);
+            throw new Error(`Failed to fund createKey ${this.createKeypair!.publicKey.toString()}. Airdrop failed: ${transferError.message}. Please manually fund this address with at least 0.01 SOL.`);
+          }
+        }
+      } else {
+        console.log('✅ CreateKey has sufficient SOL');
       }
 
       // Final balance check before proceeding with retries
       console.log('📊 Performing final balance check...');
-      let finalCreatorBalance = await this.connection.getBalance(creator.publicKey);
-      let finalAdditionalMemberBalance = await this.connection.getBalance(additionalMemberKeypair.publicKey);
+      let finalMember1Balance = await this.connection.getBalance(member1Keypair.publicKey);
+      let finalMember2Balance = await this.connection.getBalance(member2Keypair.publicKey);
+      let finalMember3Balance = member3Keypair ? await this.connection.getBalance(member3Keypair.publicKey) : 0;
+      let finalCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
       
       // If balances are still low, wait and retry a few times
       let balanceRetries = 0;
       const maxBalanceRetries = 5;
       
-      while ((finalCreatorBalance < 0.01 * LAMPORTS_PER_SOL || finalAdditionalMemberBalance < 0.01 * LAMPORTS_PER_SOL) && balanceRetries < maxBalanceRetries) {
+      const hasLowBalance = finalMember1Balance < 0.01 * LAMPORTS_PER_SOL || 
+                           finalMember2Balance < 0.01 * LAMPORTS_PER_SOL || 
+                           (member3Keypair && finalMember3Balance < 0.01 * LAMPORTS_PER_SOL) ||
+                           finalCreateKeyBalance < 0.01 * LAMPORTS_PER_SOL;
+      
+      while (hasLowBalance && balanceRetries < maxBalanceRetries) {
         console.log(`⚠️ Low balances detected (retry ${balanceRetries + 1}/${maxBalanceRetries}):`);
-        console.log(`   Creator: ${finalCreatorBalance / LAMPORTS_PER_SOL} SOL`);
-        console.log(`   Additional Member: ${finalAdditionalMemberBalance / LAMPORTS_PER_SOL} SOL`);
+        console.log(`   Member 1: ${finalMember1Balance / LAMPORTS_PER_SOL} SOL`);
+        console.log(`   Member 2: ${finalMember2Balance / LAMPORTS_PER_SOL} SOL`);
+        if (member3Keypair) {
+          console.log(`   Member 3: ${finalMember3Balance / LAMPORTS_PER_SOL} SOL`);
+        }
+        console.log(`   CreateKey: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
         
         console.log('⏳ Waiting for balance updates...');
         await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds
         
-        finalCreatorBalance = await this.connection.getBalance(creator.publicKey);
-        finalAdditionalMemberBalance = await this.connection.getBalance(additionalMemberKeypair.publicKey);
+        finalMember1Balance = await this.connection.getBalance(member1Keypair.publicKey);
+        finalMember2Balance = await this.connection.getBalance(member2Keypair.publicKey);
+        if (member3Keypair) {
+          finalMember3Balance = await this.connection.getBalance(member3Keypair.publicKey);
+        }
+        finalCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
         balanceRetries++;
       }
       
       console.log('📊 Final balances before multisig creation:');
-      console.log(`   Creator: ${finalCreatorBalance / LAMPORTS_PER_SOL} SOL (${finalCreatorBalance} lamports)`);
-      console.log(`   Additional Member: ${finalAdditionalMemberBalance / LAMPORTS_PER_SOL} SOL (${finalAdditionalMemberBalance} lamports)`);
+      console.log(`   Member 1: ${finalMember1Balance / LAMPORTS_PER_SOL} SOL (${finalMember1Balance} lamports)`);
+      console.log(`   Member 2: ${finalMember2Balance / LAMPORTS_PER_SOL} SOL (${finalMember2Balance} lamports)`);
+      if (member3Keypair) {
+        console.log(`   Member 3: ${finalMember3Balance / LAMPORTS_PER_SOL} SOL (${finalMember3Balance} lamports)`);
+      }
+      console.log(`   CreateKey: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${finalCreateKeyBalance} lamports)`);
       
-      if (finalCreatorBalance < 0.01 * LAMPORTS_PER_SOL) {
-        throw new Error(`Creator ${creator.publicKey.toString()} has insufficient SOL: ${finalCreatorBalance / LAMPORTS_PER_SOL} SOL. Please check Solana Explorer: https://explorer.solana.com/address/${creator.publicKey.toString()}`);
+      if (finalMember1Balance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(`Member 1 ${member1Keypair.publicKey.toString()} has insufficient SOL: ${finalMember1Balance / LAMPORTS_PER_SOL} SOL. Please check Solana Explorer: https://explorer.solana.com/address/${member1Keypair.publicKey.toString()}`);
       }
       
-      if (finalAdditionalMemberBalance < 0.01 * LAMPORTS_PER_SOL) {
-        throw new Error(`Additional member ${additionalMemberKeypair.publicKey.toString()} has insufficient SOL: ${finalAdditionalMemberBalance / LAMPORTS_PER_SOL} SOL. Please check Solana Explorer: https://explorer.solana.com/address/${additionalMemberKeypair.publicKey.toString()}`);
+      if (finalMember2Balance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(`Member 2 ${member2Keypair.publicKey.toString()} has insufficient SOL: ${finalMember2Balance / LAMPORTS_PER_SOL} SOL. Please check Solana Explorer: https://explorer.solana.com/address/${member2Keypair.publicKey.toString()}`);
+      }
+      
+      if (member3Keypair && finalMember3Balance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(`Member 3 ${member3Keypair.publicKey.toString()} has insufficient SOL: ${finalMember3Balance / LAMPORTS_PER_SOL} SOL. Please check Solana Explorer: https://explorer.solana.com/address/${member3Keypair.publicKey.toString()}`);
+      }
+      
+      if (finalCreateKeyBalance < 0.01 * LAMPORTS_PER_SOL) {
+        throw new Error(`CreateKey ${this.createKeypair!.publicKey.toString()} has insufficient SOL: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL. Please check Solana Explorer: https://explorer.solana.com/address/${this.createKeypair!.publicKey.toString()}`);
       }
 
-      // Both members need to sign the multisig creation transaction
-      // Even with multisigCreate, all members must sign
-      const allSigners = [creator, additionalMemberKeypair];
-      console.log(`🔐 Signing transaction with ${allSigners.length} signers (creator + additional member)`);
-      console.log('📝 Note: All members must sign the multisig creation transaction');
+      // The multisigCreateV2 instruction requires both the creator and the createKey to sign
+      const allSigners = [member1Keypair, this.createKeypair!];
+      console.log(`🔐 Signing transaction with ${allSigners.length} signers (creator + createKey)`);
+      console.log('📝 Note: Both creator and createKey must sign the multisig creation transaction');
       
-      // Use sendAndConfirmTransaction with both signers
+      // Use sendAndConfirmTransaction with creator and createKey
       let signature: string;
       try {
         signature = await sendAndConfirmTransaction(
@@ -322,11 +568,11 @@ export class MultisigService {
           console.error('   3. Account validation failed');
           
           // Show current balances again
-          const creatorBalance = await this.connection.getBalance(creator.publicKey);
-          const additionalMemberBalance = await this.connection.getBalance(additionalMemberKeypair.publicKey);
+          const member1Balance = await this.connection.getBalance(member1Keypair.publicKey);
+          const member2Balance = await this.connection.getBalance(member2Keypair.publicKey);
           console.error('💰 Current balances:');
-          console.error(`   Creator: ${creatorBalance / LAMPORTS_PER_SOL} SOL`);
-          console.error(`   Additional Member: ${additionalMemberBalance / LAMPORTS_PER_SOL} SOL`);
+          console.error(`   Member 1: ${member1Balance / LAMPORTS_PER_SOL} SOL`);
+          console.error(`   Member 2: ${member2Balance / LAMPORTS_PER_SOL} SOL`);
         }
         
         throw error;
@@ -334,14 +580,27 @@ export class MultisigService {
 
       console.log(`✅ Multisig created successfully! Signature: ${signature}`);
       
+      // Track activity for all members involved in multisig creation
+      try {
+        await adminInactivityService.updateAdminActivity(member1Keypair.publicKey.toString());
+        await adminInactivityService.updateAdminActivity(member2Keypair.publicKey.toString());
+        if (member3Keypair) {
+          await adminInactivityService.updateAdminActivity(member3Keypair.publicKey.toString());
+        }
+        console.log('📊 Updated activity for all multisig members');
+      } catch (activityError) {
+        console.warn('⚠️ Failed to update member activity:', activityError);
+        // Don't fail the multisig creation if activity tracking fails
+      }
+      
       return {
         multisigPda: multisigPda.toString(),
         createKey: this.createKey.toString(),
         transactionSignature: signature,
         memberPublicKeys: [
-          creator.publicKey.toString(),
-          additionalMemberKeypair.publicKey.toString()
-        ], // Creator + additional member
+          member1Keypair.publicKey.toString(),
+          member2Keypair.publicKey.toString()
+        ], // Member 1 + Member 2 from provided private keys
       };
     } catch (error) {
       console.error('Error creating multisig:', error);
@@ -707,6 +966,33 @@ export class MultisigService {
   }
 
   /**
+   * Get the main multisig PDA from database
+   */
+  static async getMainMultisigPda(): Promise<string | null> {
+    try {
+      const mainMultisig = await prisma.multisig.findFirst({
+        where: { 
+          isActive: true,
+          name: "Main Multisig"
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+      
+      return mainMultisig?.multisigPda || null;
+    } catch (error) {
+      console.error('Error getting main multisig PDA:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Get multisig PDA address as string
+   */
+  getMultisigPdaAddress(): string | null {
+    return this.multisigPda?.toString() || null;
+  }
+
+  /**
    * Update transaction status
    */
   async updateTransactionStatus(
@@ -738,22 +1024,18 @@ let multisigServiceInstance: MultisigService | null = null;
 
 export function getMultisigService(): MultisigService {
   if (!multisigServiceInstance) {
-    // Try multiple RPC URLs for better reliability
-    const rpcUrls = [
-      process.env.SOLANA_RPC_URL,
-      "https://api.devnet.solana.com", // Devnet (more reliable for testing)
-      "https://api.mainnet-beta.solana.com", // Mainnet
-      "https://solana-api.projectserum.com", // Alternative mainnet
-    ].filter(Boolean);
-
+    // Load configuration from environment variables
+    const multisigConfig = getMultisigConfig();
+    
     const config: MultisigConfig = {
-      rpcUrl: rpcUrls[0] || "https://api.devnet.solana.com",
+      rpcUrl: multisigConfig.rpcUrl,
       // Default values for multisig creation (not used for specific user operations)
-      threshold: 2,
+      threshold: multisigConfig.defaultThreshold,
       members: []
     };
     
     console.log(`🔗 Using Solana RPC: ${config.rpcUrl}`);
+    console.log(`⚙️ Using environment configuration for multisig defaults`);
     multisigServiceInstance = new MultisigService(config);
   }
   return multisigServiceInstance;

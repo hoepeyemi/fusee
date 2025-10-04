@@ -1,4 +1,5 @@
 import { SignerManagementService } from './signerManagementService';
+import { adminInactivityService } from './adminInactivityService';
 
 export class BackgroundJobs {
   private static intervalId: NodeJS.Timeout | null = null;
@@ -12,6 +13,9 @@ export class BackgroundJobs {
     
     // Start inactive member check
     this.startInactiveMemberCheck();
+    
+    // Start admin inactivity monitoring
+    this.startAdminInactivityMonitoring();
     
     console.log('✅ Background jobs started');
   }
@@ -54,11 +58,27 @@ export class BackgroundJobs {
   }
 
   /**
+   * Start admin inactivity monitoring
+   */
+  private static startAdminInactivityMonitoring(): void {
+    console.log('🔄 Starting admin inactivity monitoring...');
+    adminInactivityService.startMonitoring();
+  }
+
+  /**
    * Run a manual check (for testing)
    */
   public static async runManualCheck(): Promise<void> {
     console.log('🔍 Running manual inactive member check...');
     await this.checkInactiveMembers();
+  }
+
+  /**
+   * Run a manual admin inactivity check (for testing)
+   */
+  public static async runManualAdminCheck(): Promise<void> {
+    console.log('🔍 Running manual admin inactivity check...');
+    await adminInactivityService.checkInactiveAdmins();
   }
 }
 

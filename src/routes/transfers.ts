@@ -1,8 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { validateTransfer, handleValidationErrors } from '../middleware/security';
-import DedicatedWalletService from '../services/dedicatedWallet';
-import FeeService from '../services/feeService';
+import { FirstNameTransferService } from '../services/firstNameTransferService';
 
 const router = Router();
 
@@ -76,157 +75,341 @@ router.post('/', validateTransfer, handleValidationErrors, async (req: Request, 
   try {
     const { senderId, receiverFirstName, amount, currency = 'SOL', notes } = req.body;
 
-    // Find sender
-    const sender = await prisma.user.findUnique({
-      where: { id: senderId }
-    });
-
-    if (!sender) {
-      return res.status(404).json({
-        message: 'Sender not found',
-        error: 'Not Found'
-      });
-    }
-
-    // Find receiver by first name
-    const receiver = await prisma.user.findFirst({
-      where: { 
-        firstName: receiverFirstName,
-        id: { not: senderId } // Can't send to yourself
-      }
-    });
-
-    if (!receiver) {
-      return res.status(404).json({
-        message: `No user found with first name "${receiverFirstName}"`,
-        error: 'Not Found'
-      });
-    }
-
-    // Calculate fee and net amount
-    const { fee, netAmount } = FeeService.calculateFee(parseFloat(amount));
-    
-    // Check if sender has sufficient balance in vault (including fee)
-    const totalRequired = parseFloat(amount);
-    if (Number(sender.balance) < totalRequired) {
-      return res.status(400).json({
-        message: 'Insufficient balance in vault',
-        error: 'Bad Request',
-        currentBalance: Number(sender.balance),
-        requestedAmount: totalRequired,
-        fee: fee,
-        totalRequired: totalRequired
-      });
-    }
-
-    // Create transfer record with fee information
-    const transfer = await prisma.transfer.create({
-      data: {
-        senderId,
-        receiverId: receiver.id,
-        amount: parseFloat(amount),
-        fee: fee,
-        netAmount: netAmount,
-        currency,
-        notes,
-        status: 'PENDING'
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            fullName: true,
-            firstName: true,
-            solanaWallet: true,
-            balance: true
-          }
-        },
-        receiver: {
-          select: {
-            id: true,
-            fullName: true,
-            firstName: true,
-            solanaWallet: true,
-            balance: true
-          }
-        }
-      }
-    });
-
-    // Get dedicated wallet for transaction logging
-    const dedicatedWallet = DedicatedWalletService.getInstance();
-    const walletAddress = dedicatedWallet.getWalletAddress();
-    
-    // Simulate successful transfer through dedicated wallet
-    const simulatedTransactionHash = `DEDICATED_TRANSFER_${Date.now()}_${Math.random().toString(16).substr(2, 8)}`;
-    
-    // Process fee collection
-    const feeResult = await FeeService.processTransferFee(transfer.id, parseFloat(amount), currency);
-
-    // Update transfer with simulated transaction hash and mark as completed
-    const completedTransfer = await prisma.transfer.update({
-      where: { id: transfer.id },
-      data: {
-        transactionHash: simulatedTransactionHash,
-        status: 'COMPLETED'
-      },
-      include: {
-        sender: {
-          select: {
-            id: true,
-            fullName: true,
-            firstName: true,
-            solanaWallet: true,
-            balance: true
-          }
-        },
-        receiver: {
-          select: {
-            id: true,
-            fullName: true,
-            firstName: true,
-            solanaWallet: true,
-            balance: true
-          }
-        }
-      }
-    });
-
-    // Update sender's balance (deduct full amount including fee)
-    await prisma.user.update({
-      where: { id: senderId },
-      data: {
-        balance: {
-          decrement: parseFloat(amount)
-        }
-      }
-    });
-
-    // Update receiver's balance (add net amount after fee)
-    await prisma.user.update({
-      where: { id: receiver.id },
-      data: {
-        balance: {
-          increment: netAmount
-        }
-      }
+    // Process first name transfer (internal balance transfer)
+    const result = await FirstNameTransferService.processFirstNameTransfer({
+      senderId,
+      receiverFirstName,
+      amount: parseFloat(amount),
+      currency,
+      notes
     });
 
     res.status(201).json({
-      message: 'Transfer completed successfully through dedicated wallet',
-      transfer: completedTransfer,
-      dedicatedWalletAddress: walletAddress,
+      message: 'Internal transfer completed successfully',
+      transfer: {
+        id: result.transferId,
+        senderId: result.senderId,
+        receiverId: result.receiverId,
+        amount: result.amount,
+        fee: result.fee,
+        netAmount: result.netAmount,
+        currency: result.currency,
+        status: result.status,
+        transactionHash: result.transactionHash,
+        notes: notes
+      },
+      balances: {
+        sender: {
+          firstName: result.senderFirstName,
+          balance: result.senderBalance
+        },
+        receiver: {
+          firstName: result.receiverFirstName,
+          balance: result.receiverBalance
+        }
+      },
       fee: {
-        amount: feeResult.fee,
+        amount: result.fee,
         rate: '0.001%',
-        netAmount: feeResult.netAmount,
-        feeWalletAddress: feeResult.feeWalletAddress
-      }
+        netAmount: result.netAmount
+      },
+      note: 'This is an internal balance transfer, not a real Solana transaction'
     });
   } catch (error) {
     console.error('Error creating transfer:', error);
+    
+    if (error.message.includes('not found') || error.message.includes('No user found')) {
+      return res.status(404).json({
+        message: error.message,
+        error: 'Not Found'
+      });
+    }
+    
+    if (error.message.includes('Insufficient balance')) {
+      return res.status(400).json({
+        message: error.message,
+        error: 'Bad Request'
+      });
+    }
+    
     res.status(500).json({
-      message: 'Failed to create transfer',
+      message: 'Internal server error',
+      error: 'Internal Server Error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/transfers/balance/{userId}:
+ *   get:
+ *     summary: Get user's current balance
+ *     tags: [Transfers]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: User balance retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 userId:
+ *                   type: integer
+ *                 balance:
+ *                   type: number
+ *                   format: decimal
+ *                 currency:
+ *                   type: string
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/balance/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const userIdNum = parseInt(userId);
+
+    if (isNaN(userIdNum)) {
+      return res.status(400).json({
+        message: 'Invalid user ID',
+        error: 'Bad Request'
+      });
+    }
+
+    const balance = await FirstNameTransferService.getUserBalance(userIdNum);
+
+    res.json({
+      userId: userIdNum,
+      balance: balance,
+      currency: 'SOL'
+    });
+  } catch (error) {
+    console.error('Error getting user balance:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        message: error.message,
+        error: 'Not Found'
+      });
+    }
+    
+    res.status(500).json({
+      message: 'Internal server error',
+      error: 'Internal Server Error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/transfers/history/{userId}:
+ *   get:
+ *     summary: Get user's transfer history
+ *     tags: [Transfers]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Transfer history retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 transfers:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       amount:
+ *                         type: number
+ *                       fee:
+ *                         type: number
+ *                       netAmount:
+ *                         type: number
+ *                       currency:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       transactionHash:
+ *                         type: string
+ *                       sender:
+ *                         type: object
+ *                         properties:
+ *                           firstName:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
+ *                       receiver:
+ *                         type: object
+ *                         properties:
+ *                           firstName:
+ *                             type: string
+ *                           fullName:
+ *                             type: string
+ *       404:
+ *         description: User not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/history/:userId', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const userIdNum = parseInt(userId);
+
+    if (isNaN(userIdNum)) {
+      return res.status(400).json({
+        message: 'Invalid user ID',
+        error: 'Bad Request'
+      });
+    }
+
+    const transfers = await FirstNameTransferService.getUserTransferHistory(userIdNum);
+
+    res.json({
+      userId: userIdNum,
+      transfers: transfers,
+      count: transfers.length
+    });
+  } catch (error) {
+    console.error('Error getting transfer history:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        message: error.message,
+        error: 'Not Found'
+      });
+    }
+    
+    res.status(500).json({
+      message: 'Internal server error',
+      error: 'Internal Server Error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/transfers/validate:
+ *   post:
+ *     summary: Validate if user can make a transfer
+ *     tags: [Transfers]
+ *     security:
+ *       - csrf: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - userId
+ *               - amount
+ *             properties:
+ *               userId:
+ *                 type: integer
+ *                 description: User ID
+ *                 example: 1
+ *               amount:
+ *                 type: number
+ *                 format: decimal
+ *                 description: Amount to transfer
+ *                 example: 5.0
+ *     responses:
+ *       200:
+ *         description: Validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 canTransfer:
+ *                   type: boolean
+ *                 currentBalance:
+ *                   type: number
+ *                 requiredAmount:
+ *                   type: number
+ *                 shortfall:
+ *                   type: number
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.post('/validate', async (req: Request, res: Response) => {
+  try {
+    const { userId, amount } = req.body;
+
+    if (!userId || !amount) {
+      return res.status(400).json({
+        message: 'Missing required fields: userId, amount',
+        error: 'Bad Request'
+      });
+    }
+
+    const validation = await FirstNameTransferService.validateTransfer(
+      parseInt(userId),
+      parseFloat(amount)
+    );
+
+    res.json(validation);
+  } catch (error) {
+    console.error('Error validating transfer:', error);
+    
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        message: error.message,
+        error: 'Not Found'
+      });
+    }
+    
+    res.status(500).json({
+      message: 'Internal server error',
       error: 'Internal Server Error'
     });
   }

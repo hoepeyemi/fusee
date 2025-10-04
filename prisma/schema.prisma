@@ -88,6 +88,7 @@ model Vault {
   deposits      Deposit[]    @relation("VaultDeposits")
   withdrawals   Withdrawal[] @relation("VaultWithdrawals")
   fees          Fee[]        @relation("VaultFees")
+  treasuryOperations TreasuryOperation[] @relation("VaultTreasuryOperations")
 
   @@map("vaults")
 }
@@ -251,6 +252,13 @@ model MultisigMember {
   publicKey     String   @unique // Member's public key
   permissions   String   // JSON string of permissions (Proposer, Voter, Executor)
   isActive      Boolean  @default(true)
+  
+  // Activity tracking for inactivity detection
+  lastActivityAt DateTime @default(now()) // Last time member was active
+  isInactive    Boolean  @default(false) // Whether member is considered inactive
+  inactiveSince DateTime? // When member became inactive
+  removalEligibleAt DateTime? // When member becomes eligible for removal (48 hours after inactivity)
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -341,6 +349,7 @@ enum FeeStatus {
 
 enum WalletTransferStatus {
   PENDING
+  PENDING_APPROVAL
   COMPLETED
   FAILED
   CANCELLED
@@ -354,6 +363,7 @@ enum WalletFeeStatus {
 
 enum ExternalTransferStatus {
   PENDING
+  PENDING_APPROVAL
   COMPLETED
   FAILED
   CANCELLED
@@ -386,4 +396,61 @@ enum MultisigProposalStatus {
 enum MultisigApprovalType {
   APPROVE
   REJECT
+}
+
+model MultisigTransferProposal {
+  id            Int      @id @default(autoincrement())
+  fromWallet    String   // Source wallet address
+  toWallet      String   // Destination wallet address
+  amount        Decimal  @db.Decimal(18, 8) // Transfer amount
+  netAmount     Decimal  @db.Decimal(18, 8) // Amount after fee deduction
+  fee           Decimal  @db.Decimal(18, 8) // Fee amount
+  currency      String   @default("SOL")
+  status        MultisigTransferStatus @default(PENDING)
+  requestedBy   String   // Public key of the requester
+  multisigPda   String   // Multisig PDA for approval
+  proposalId    String?  // External proposal ID (if any)
+  transactionHash String? // Blockchain transaction hash
+  notes         String?  // Optional transfer notes
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("multisig_transfer_proposals")
+}
+
+enum MultisigTransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXECUTED
+  FAILED
+}
+
+model TreasuryOperation {
+  id                      Int      @id @default(autoincrement())
+  operationId             String   @unique // Unique operation identifier
+  vaultId                 Int      // Reference to vault
+  fromAddress             String   // Source address (vault address)
+  toAddress               String   // Destination address
+  amount                  Decimal  @db.Decimal(18, 8) // Transfer amount
+  currency                String   @default("SOL")
+  status                  TreasuryOperationStatus @default(PENDING)
+  multisigTransactionIndex String? // Multisig transaction index
+  transactionHash         String?  // Blockchain transaction hash
+  notes                   String?  // Optional operation notes
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  // Relations
+  vault                   Vault    @relation("VaultTreasuryOperations", fields: [vaultId], references: [id])
+
+  @@map("treasury_operations")
+}
+
+enum TreasuryOperationStatus {
+  PENDING
+  APPROVED
+  EXECUTED
+  REJECTED
+  FAILED
 }

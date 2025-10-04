@@ -10,6 +10,11 @@ import externalTransferRoutes from './routes/externalTransfers';
 import multisigRoutes from './routes/multisig';
 import signerManagementRoutes from './routes/signerManagement';
 import userMultisigRoutes from './routes/userMultisig';
+import adminInactivityRoutes from './routes/adminInactivity';
+import multisigTransferRoutes from './routes/multisigTransfers';
+import multisigStatusRoutes from './routes/multisigStatus';
+import multisigProposalRoutes from './routes/multisigProposals';
+import treasuryVaultRoutes from './routes/treasuryVault';
 import { BackgroundJobs } from './services/backgroundJobs';
 import { 
   helmetMiddleware, 
@@ -100,6 +105,11 @@ app.use('/api/external-transfers', verifyCSRFToken, externalTransferRoutes);
 app.use('/api/multisig', verifyCSRFToken, multisigRoutes);
 app.use('/api/signer-management', verifyCSRFToken, signerManagementRoutes);
 app.use('/api/users', verifyCSRFToken, userMultisigRoutes);
+app.use('/api/admin-inactivity', verifyCSRFToken, adminInactivityRoutes);
+app.use('/api/multisig-transfers', verifyCSRFToken, multisigTransferRoutes);
+app.use('/api/multisig-status', verifyCSRFToken, multisigStatusRoutes);
+app.use('/api/multisig-proposals', verifyCSRFToken, multisigProposalRoutes);
+app.use('/api/treasury-vault', verifyCSRFToken, treasuryVaultRoutes);
 
 /**
  * @swagger

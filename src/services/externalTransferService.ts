@@ -2,6 +2,9 @@ import { prisma } from '../lib/prisma';
 import FeeWalletService from './feeWalletService';
 import { createUserMultisigService } from './multisigService';
 import { UserMultisigService } from './userMultisigService';
+import { RealFeeTransactionService } from './realFeeTransactionService';
+import { MultisigProposalService } from './multisigProposalService';
+import { Connection } from '@solana/web3.js';
 
 export class ExternalTransferService {
   private static readonly FEE_RATE = 0.00001; // 0.001% = 0.00001
@@ -20,7 +23,236 @@ export class ExternalTransferService {
   }
 
   /**
-   * Process external wallet transfer with fee collection using multisig
+   * Create external transfer proposal for multisig approval
+   */
+  public static async createExternalTransferProposal(
+    userId: number,
+    fromWallet: string,
+    toExternalWallet: string,
+    amount: number,
+    currency: string = 'SOL',
+    notes?: string
+  ): Promise<{
+    proposalId: number;
+    multisigPda: string;
+    transactionIndex: string;
+    status: string;
+    message: string;
+    fee: number;
+    netAmount: number;
+  }> {
+    try {
+      // Validate inputs
+      if (!userId || typeof userId !== 'number' || userId <= 0) {
+        throw new Error('Invalid user ID');
+      }
+
+      if (!fromWallet || typeof fromWallet !== 'string') {
+        throw new Error('Invalid sender wallet address');
+      }
+
+      if (!toExternalWallet || typeof toExternalWallet !== 'string') {
+        throw new Error('Invalid recipient wallet address');
+      }
+
+      if (!amount || typeof amount !== 'number' || amount <= 0) {
+        throw new Error('Amount must be greater than 0');
+      }
+
+      if (amount > 1000000) {
+        throw new Error('Amount cannot exceed 1,000,000 SOL');
+      }
+
+      if (!currency || !['SOL', 'USDC', 'USDT'].includes(currency)) {
+        throw new Error('Currency must be SOL, USDC, or USDT');
+      }
+
+      // Verify user exists
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      const { fee, netAmount } = this.calculateFee(amount);
+
+    // Create multisig proposal
+    const proposalService = MultisigProposalService.getInstance();
+    const proposal = await proposalService.createExternalTransferProposal({
+      fromWallet,
+      toWallet: toExternalWallet,
+      amount: netAmount, // Use net amount (after fee)
+      currency,
+      memo: notes,
+      transferType: 'EXTERNAL',
+      userId
+    });
+
+    // Create external transfer record with proposal info
+    const externalTransfer = await prisma.externalTransfer.create({
+      data: {
+        userId,
+        fromWallet,
+        toExternalWallet,
+        amount,
+        fee,
+        netAmount,
+        currency,
+          status: 'PENDING_APPROVAL' as any,
+        transactionHash: `PROPOSAL_${proposal.proposalId}`,
+        feeWalletAddress: 'MULTISIG_PDA', // Will be updated when executed
+        notes: notes
+      }
+    });
+
+    console.log(`📝 External transfer proposal created:`);
+    console.log(`   Transfer ID: ${externalTransfer.id}`);
+    console.log(`   Proposal ID: ${proposal.proposalId}`);
+    console.log(`   Amount: ${amount} ${currency}`);
+    console.log(`   Fee: ${fee} ${currency}`);
+    console.log(`   Net Amount: ${netAmount} ${currency}`);
+    console.log(`   Multisig PDA: ${proposal.multisigPda}`);
+
+      return {
+        proposalId: proposal.proposalId,
+        multisigPda: proposal.multisigPda,
+        transactionIndex: proposal.transactionIndex,
+        status: proposal.status,
+        message: proposal.message,
+        fee: fee,
+        netAmount: netAmount
+      };
+
+    } catch (error) {
+      console.error('Error creating external transfer proposal:', error);
+      
+      // Handle specific error types
+      if (error instanceof Error) {
+        if (error.message.includes('multisig') || error.message.includes('Multisig')) {
+          throw new Error('Multisig service error: ' + error.message);
+        }
+        
+        if (error.message.includes('Prisma') || error.message.includes('database')) {
+          throw new Error('Database error: ' + error.message);
+        }
+        
+        if (error.message.includes('validation') || error.message.includes('Invalid')) {
+          throw new Error('Validation error: ' + error.message);
+        }
+        
+        if (error.message.includes('User not found')) {
+          throw new Error('User not found. Please check your user ID.');
+        }
+        
+        // Return the original error message for user-friendly errors
+        throw new Error(error.message);
+      }
+      
+      // Generic error fallback
+      throw new Error('Failed to create external transfer proposal. Please try again.');
+    }
+  }
+
+  /**
+   * Process external wallet transfer with real fee transaction to treasury
+   */
+  public static async processExternalTransferWithRealFees(
+    userId: number,
+    fromWallet: string,
+    toExternalWallet: string,
+    amount: number,
+    currency: string = 'SOL',
+    notes?: string,
+    connection?: Connection
+  ): Promise<{
+    transferId: number;
+    fee: number;
+    netAmount: number;
+    treasuryAddress: string;
+    feeTransactionHash: string;
+    mainTransactionHash: string;
+    multisigTransactionIndex?: string;
+    requiresApproval: boolean;
+  }> {
+    // Verify user exists and has sufficient balance
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    const { fee, netAmount } = this.calculateFee(amount);
+
+    // Initialize real fee transaction service if connection provided
+    if (connection) {
+      RealFeeTransactionService.initialize(connection);
+    }
+
+    // Send real fee transaction to treasury
+    const feeResult = await RealFeeTransactionService.sendFeeToTreasury(
+      fromWallet,
+      fee,
+      currency
+    );
+
+    if (!feeResult.success) {
+      throw new Error(`Failed to send fee to treasury: ${feeResult.error}`);
+    }
+
+    // Create external transfer record
+    const externalTransfer = await prisma.externalTransfer.create({
+      data: {
+        userId,
+        fromWallet,
+        toExternalWallet,
+        amount,
+        fee,
+        netAmount,
+        currency,
+        status: 'COMPLETED',
+        transactionHash: `EXTERNAL_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+        feeWalletAddress: feeResult.treasuryAddress,
+        notes: notes
+      }
+    });
+
+    // Create fee record
+    const feeRecord = await prisma.fee.create({
+      data: {
+        transferId: externalTransfer.id,
+        vaultId: 1, // Main vault ID
+        amount: fee,
+        currency,
+        feeRate: this.FEE_RATE,
+        status: 'COLLECTED'
+      }
+    });
+
+    console.log(`💰 External transfer completed with real fee transaction:`);
+    console.log(`   Transfer ID: ${externalTransfer.id}`);
+    console.log(`   Amount: ${amount} ${currency}`);
+    console.log(`   Fee: ${fee} ${currency}`);
+    console.log(`   Net Amount: ${netAmount} ${currency}`);
+    console.log(`   Fee Transaction: ${feeResult.transactionHash}`);
+    console.log(`   Treasury: ${feeResult.treasuryAddress}`);
+
+    return {
+      transferId: externalTransfer.id,
+      fee: fee,
+      netAmount: netAmount,
+      treasuryAddress: feeResult.treasuryAddress,
+      feeTransactionHash: feeResult.transactionHash,
+      mainTransactionHash: externalTransfer.transactionHash,
+      requiresApproval: false // Real transaction, no multisig approval needed
+    };
+  }
+
+  /**
+   * Process external wallet transfer with fee collection using multisig (legacy method)
    */
   public static async processExternalTransfer(
     userId: number,

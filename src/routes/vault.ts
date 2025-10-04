@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { validateDeposit, validateWithdrawal, handleValidationErrors } from '../middleware/security';
-import DedicatedWalletService from '../services/dedicatedWallet';
+import { MultisigVaultService } from '../services/multisigVaultService';
 import FeeService from '../services/feeService';
 
 const router = Router();
@@ -172,15 +172,33 @@ router.post('/deposit', validateDeposit, handleValidationErrors, async (req: Req
       });
     }
 
-    // Get or create vault using dedicated wallet service
-    const dedicatedWallet = DedicatedWalletService.getInstance();
-    const vault = await dedicatedWallet.getOrCreateVault(currency);
+    // Get or create vault using multisig vault service
+    const multisigVault = MultisigVaultService.getInstance();
+    const vault = await multisigVault.getOrCreateMultisigVault(currency);
+
+    // Find or create vault record in database
+    let vaultRecord = await prisma.vault.findUnique({
+      where: { address: vault.multisigPda }
+    });
+
+    if (!vaultRecord) {
+      vaultRecord = await prisma.vault.create({
+        data: {
+          address: vault.multisigPda,
+          name: vault.name,
+          totalBalance: 0,
+          feeBalance: 0,
+          currency: vault.currency,
+          isActive: true
+        }
+      });
+    }
 
     // Create deposit record
     const deposit = await prisma.deposit.create({
       data: {
         userId,
-        vaultId: vault.id,
+        vaultId: vaultRecord.id,
         amount: parseFloat(amount),
         currency,
         notes,
@@ -210,15 +228,12 @@ router.post('/deposit', validateDeposit, handleValidationErrors, async (req: Req
       }
     });
 
-    // Update vault balance
-    await prisma.vault.update({
-      where: { id: vault.id },
-      data: {
-        totalBalance: {
-          increment: parseFloat(amount)
-        }
-      }
-    });
+    // Update vault balance using multisig vault service
+    await multisigVault.updateVaultBalance(
+      vault.multisigPda,
+      parseFloat(amount),
+      'deposit'
+    );
 
     res.status(201).json({
       message: 'Deposit completed successfully',
@@ -321,15 +336,33 @@ router.post('/withdraw', validateWithdrawal, handleValidationErrors, async (req:
       });
     }
 
-    // Get vault using dedicated wallet service
-    const dedicatedWallet = DedicatedWalletService.getInstance();
-    const vault = await dedicatedWallet.getOrCreateVault(currency);
+    // Get vault using multisig vault service
+    const multisigVault = MultisigVaultService.getInstance();
+    const vault = await multisigVault.getOrCreateMultisigVault(currency);
+
+    // Find or create vault record in database
+    let vaultRecord = await prisma.vault.findUnique({
+      where: { address: vault.multisigPda }
+    });
+
+    if (!vaultRecord) {
+      vaultRecord = await prisma.vault.create({
+        data: {
+          address: vault.multisigPda,
+          name: vault.name,
+          totalBalance: 0,
+          feeBalance: 0,
+          currency: vault.currency,
+          isActive: true
+        }
+      });
+    }
 
     // Create withdrawal record
     const withdrawal = await prisma.withdrawal.create({
       data: {
         userId,
-        vaultId: vault.id,
+        vaultId: vaultRecord.id,
         amount: parseFloat(amount),
         currency,
         notes,
@@ -359,15 +392,12 @@ router.post('/withdraw', validateWithdrawal, handleValidationErrors, async (req:
       }
     });
 
-    // Update vault balance
-    await prisma.vault.update({
-      where: { id: vault.id },
-      data: {
-        totalBalance: {
-          decrement: parseFloat(amount)
-        }
-      }
-    });
+    // Update vault balance using multisig vault service
+    await multisigVault.updateVaultBalance(
+      vault.multisigPda,
+      parseFloat(amount),
+      'withdrawal'
+    );
 
     res.status(201).json({
       message: 'Withdrawal completed successfully',
@@ -412,8 +442,8 @@ router.post('/withdraw', validateWithdrawal, handleValidationErrors, async (req:
  */
 router.get('/status', async (req: Request, res: Response) => {
   try {
-    const dedicatedWallet = DedicatedWalletService.getInstance();
-    const status = await dedicatedWallet.getVaultStatus();
+    const multisigVault = MultisigVaultService.getInstance();
+    const status = await multisigVault.getMultisigVaultStatus();
 
     res.json(status);
   } catch (error) {
@@ -430,24 +460,24 @@ router.get('/status', async (req: Request, res: Response) => {
  * @swagger
  * /api/vault/wallet/address:
  *   get:
- *     summary: Get current dedicated wallet address (read-only)
+ *     summary: Get current multisig wallet address (read-only)
  *     tags: [Vault]
  *     security:
  *       - csrf: []
  *     responses:
  *       200:
- *         description: Dedicated wallet address retrieved successfully
+ *         description: Multisig wallet address retrieved successfully
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 dedicatedWalletAddress:
+ *                 multisigWalletAddress:
  *                   type: string
- *                   description: Current dedicated wallet address from environment
- *                 dedicatedWalletName:
+ *                   description: Current multisig PDA address
+ *                 multisigWalletName:
  *                   type: string
- *                   description: Current dedicated wallet name from environment
+ *                   description: Current multisig wallet name
  *                 note:
  *                   type: string
  *                   description: Information about how to change the wallet address
@@ -460,12 +490,12 @@ router.get('/status', async (req: Request, res: Response) => {
  */
 router.get('/wallet/address', async (req: Request, res: Response) => {
   try {
-    const dedicatedWallet = DedicatedWalletService.getInstance();
+    const multisigVault = MultisigVaultService.getInstance();
     
     res.json({
-      dedicatedWalletAddress: dedicatedWallet.getWalletAddress(),
-      dedicatedWalletName: dedicatedWallet.getWalletName(),
-      note: 'To change the dedicated wallet address, update the DEDICATED_WALLET_ADDRESS environment variable and restart the server.'
+      multisigWalletAddress: multisigVault.getMultisigWalletAddress(),
+      multisigWalletName: multisigVault.getMultisigWalletName(),
+      note: 'This is the multisig PDA address that controls the main vault. To change it, create a new multisig and update the database.'
     });
   } catch (error) {
     console.error('Error fetching wallet address:', error);
