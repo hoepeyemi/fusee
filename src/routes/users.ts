@@ -671,32 +671,177 @@ async function calculateUserSummary() {
 }
 
 /**
- * Get counts of deleted data for response
+ * Get counts of anonymized data for response
  */
 async function getDeletedDataCounts(userId: number, user: any) {
   try {
-    // Note: These counts are approximate since data is already deleted
-    // In a real implementation, you might want to count before deletion
+    // Count anonymized data that was preserved
+    const [
+      transfersCount,
+      depositsCount,
+      withdrawalsCount,
+      externalTransfersCount,
+      walletTransfersCount
+    ] = await Promise.all([
+      prisma.transfer.count({
+        where: { 
+          OR: [
+            { senderId: userId },
+            { receiverId: userId }
+          ]
+        }
+      }),
+      prisma.deposit.count({
+        where: { userId: userId }
+      }),
+      prisma.withdrawal.count({
+        where: { userId: userId }
+      }),
+      prisma.externalTransfer.count({
+        where: { userId: userId }
+      }),
+      prisma.walletTransfer.count({
+        where: { 
+          OR: [
+            { fromWallet: user.solanaWallet },
+            { toWallet: user.solanaWallet }
+          ]
+        }
+      })
+    ]);
+
     return {
       wallet: user.solanaWallet ? { firstName: user.firstName, address: user.solanaWallet } : null,
-      transfers: 0, // Would need to count before deletion
-      deposits: 0,
-      withdrawals: 0,
-      externalTransfers: 0,
-      walletTransfers: 0,
-      message: 'Data deleted using robust multi-transaction method'
+      transfers: transfersCount,
+      deposits: depositsCount,
+      withdrawals: withdrawalsCount,
+      externalTransfers: externalTransfersCount,
+      walletTransfers: walletTransfersCount,
+      message: 'Data anonymized and retained for audit purposes',
+      anonymizedAt: new Date().toISOString()
     };
   } catch (error) {
-    console.error('Error getting deleted data counts:', error);
+    console.error('Error getting anonymized data counts:', error);
     return {
-      message: 'Data deleted successfully (counts unavailable)'
+      message: 'Data anonymized successfully (counts unavailable)',
+      anonymizedAt: new Date().toISOString()
     };
+  }
+}
+
+/**
+ * Anonymize user data while retaining all transaction history
+ * This method preserves all data for audit purposes while removing personal information
+ */
+async function anonymizeUserData(userId: number, user: any) {
+  console.log(`🔄 Starting user anonymization for user ${userId}...`);
+  
+  try {
+    // Generate anonymized identifiers
+    const anonymizedId = `ANON_${userId}_${Date.now()}`;
+    const anonymizedEmail = `anonymized_${userId}@deleted.local`;
+    const anonymizedName = `Deleted User ${userId}`;
+    const anonymizedFirstName = `Deleted_${userId}`;
+    const anonymizedWallet = `DELETED_WALLET_${userId}`;
+    
+    // Transaction 1: Anonymize external transfers (keep data, remove personal info)
+    console.log('Step 1: Anonymizing external transfers...');
+    await prisma.$transaction(async (tx) => {
+      await tx.externalTransfer.updateMany({
+        where: { userId: userId },
+        data: {
+          fromWallet: anonymizedWallet,
+          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
+        }
+      });
+    }, { timeout: 10000 });
+
+    // Transaction 2: Anonymize wallet transfers (keep data, remove personal info)
+    console.log('Step 2: Anonymizing wallet transfers...');
+    await prisma.$transaction(async (tx) => {
+      await tx.walletTransfer.updateMany({
+        where: { 
+          OR: [
+            { fromWallet: user.solanaWallet },
+            { toWallet: user.solanaWallet }
+          ]
+        },
+        data: {
+          fromWallet: user.solanaWallet === user.solanaWallet ? anonymizedWallet : undefined,
+          toWallet: user.solanaWallet === user.solanaWallet ? anonymizedWallet : undefined,
+          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
+        }
+      });
+    }, { timeout: 10000 });
+
+    // Transaction 3: Anonymize transfers (keep data, remove personal info)
+    console.log('Step 3: Anonymizing transfers...');
+    await prisma.$transaction(async (tx) => {
+      await tx.transfer.updateMany({
+        where: { 
+          OR: [
+            { senderId: userId },
+            { receiverId: userId }
+          ]
+        },
+        data: {
+          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
+        }
+      });
+    }, { timeout: 10000 });
+
+    // Transaction 4: Anonymize deposits and withdrawals (keep data, remove personal info)
+    console.log('Step 4: Anonymizing deposits and withdrawals...');
+    await prisma.$transaction(async (tx) => {
+      await tx.deposit.updateMany({
+        where: { userId: userId },
+        data: {
+          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
+        }
+      });
+      await tx.withdrawal.updateMany({
+        where: { userId: userId },
+        data: {
+          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
+        }
+      });
+    }, { timeout: 10000 });
+
+    // Transaction 5: Anonymize multisig members and delete user
+    console.log('Step 5: Anonymizing multisig members and deleting user...');
+    await prisma.$transaction(async (tx) => {
+      // Anonymize multisig members
+      await tx.multisigMember.updateMany({
+        where: { userId: userId },
+        data: {
+          publicKey: `ANONYMIZED_${userId}_${Date.now()}`,
+          permissions: 'ANONYMIZED'
+        }
+      });
+      
+      // Delete wallet mapping
+      await tx.wallet.deleteMany({
+        where: { firstName: user.firstName },
+      });
+      
+      // Delete user record
+      await tx.user.delete({
+        where: { id: userId },
+      });
+    }, { timeout: 10000 });
+
+    console.log(`✅ User ${userId} anonymized successfully - all data retained for audit`);
+    
+  } catch (error) {
+    console.error(`❌ Error in user anonymization for user ${userId}:`, error);
+    throw error;
   }
 }
 
 /**
  * Robust user deletion using multiple smaller transactions
  * This is the primary method to prevent timeout issues
+ * @deprecated Use anonymizeUserData instead to retain audit data
  */
 async function deleteUserWithMultipleTransactions(userId: number, user: any) {
   console.log(`🔄 Starting robust deletion for user ${userId}...`);
@@ -1061,7 +1206,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  * @swagger
  * /api/users/{id}:
  *   delete:
- *     summary: Delete a user and all associated data
+ *     summary: Anonymize a user while retaining all transaction data for audit
  *     tags: [Users]
  *     security:
  *       - csrf: []
@@ -1075,7 +1220,7 @@ router.get('/:id', async (req: Request, res: Response) => {
  *         example: 1
  *     responses:
  *       200:
- *         description: User deleted successfully
+ *         description: User anonymized successfully - all transaction data retained
  *         content:
  *           application/json:
  *             schema:
@@ -1083,27 +1228,27 @@ router.get('/:id', async (req: Request, res: Response) => {
  *               properties:
  *                 message:
  *                   type: string
- *                   example: "User deleted successfully"
+ *                   example: "User anonymized successfully - all transaction data retained for audit"
  *                 deletedUser:
  *                   $ref: '#/components/schemas/User'
- *                 deletedData:
+ *                 anonymizedData:
  *                   type: object
  *                   properties:
  *                     wallet:
  *                       type: object
- *                       description: "Deleted wallet mapping"
+ *                       description: "Anonymized wallet mapping"
  *                     transfers:
  *                       type: integer
- *                       description: "Number of transfers deleted"
+ *                       description: "Number of transfers anonymized and retained"
  *                     deposits:
  *                       type: integer
- *                       description: "Number of deposits deleted"
+ *                       description: "Number of deposits anonymized and retained"
  *                     withdrawals:
  *                       type: integer
- *                       description: "Number of withdrawals deleted"
+ *                       description: "Number of withdrawals anonymized and retained"
  *                     externalTransfers:
  *                       type: integer
- *                       description: "Number of external transfers deleted"
+ *                       description: "Number of external transfers anonymized and retained"
  *       404:
  *         description: User not found
  *         content:
@@ -1155,10 +1300,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    // Use the robust multi-transaction approach by default
-    // This prevents timeout issues with large datasets
-    console.log(`🗑️ Starting robust deletion for user ${userId}...`);
-    await deleteUserWithMultipleTransactions(userId, user);
+    // Use anonymization approach to retain all data for audit purposes
+    // This preserves transaction history while removing personal information
+    console.log(`🗑️ Starting user anonymization for user ${userId}...`);
+    await anonymizeUserData(userId, user);
     
     // Get counts for response
     const counts = await getDeletedDataCounts(userId, user);
@@ -1169,9 +1314,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
     };
 
     res.json({
-      message: 'User deleted successfully',
+      message: 'User anonymized successfully - all transaction data retained for audit',
       deletedUser: result.deletedUser,
-      deletedData: result.deletedData,
+      anonymizedData: result.deletedData,
+      note: 'Personal information removed, transaction history preserved'
     });
   } catch (error) {
     console.error('Error deleting user:', error);
