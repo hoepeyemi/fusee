@@ -5,6 +5,672 @@ import { validateUser, handleValidationErrors } from '../middleware/security';
 const router = Router();
 
 /**
+ * @swagger
+ * /api/users/all:
+ *   get:
+ *     summary: Get all users with complete details
+ *     tags: [Users]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: query
+ *         name: includeInactive
+ *         schema:
+ *           type: boolean
+ *         description: Include inactive users (default false)
+ *         example: false
+ *       - in: query
+ *         name: includeMultisig
+ *         schema:
+ *           type: boolean
+ *         description: Include multisig details (default true)
+ *         example: true
+ *       - in: query
+ *         name: includeTransactions
+ *         schema:
+ *           type: boolean
+ *         description: Include transaction history (default true)
+ *         example: true
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Limit number of users returned (default 100)
+ *         example: 100
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *         description: Offset for pagination (default 0)
+ *         example: 0
+ *     responses:
+ *       200:
+ *         description: Users retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 users:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       email:
+ *                         type: string
+ *                       fullName:
+ *                         type: string
+ *                       firstName:
+ *                         type: string
+ *                       phoneNumber:
+ *                         type: string
+ *                       solanaWallet:
+ *                         type: string
+ *                       balance:
+ *                         type: number
+ *                       multisigPda:
+ *                         type: string
+ *                       multisigCreateKey:
+ *                         type: string
+ *                       multisigThreshold:
+ *                         type: integer
+ *                       multisigTimeLock:
+ *                         type: integer
+ *                       hasMultisig:
+ *                         type: boolean
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                       updatedAt:
+ *                         type: string
+ *                         format: date-time
+ *                       multisigMembers:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             publicKey:
+ *                               type: string
+ *                             permissions:
+ *                               type: string
+ *                             isActive:
+ *                               type: boolean
+ *                             lastActivityAt:
+ *                               type: string
+ *                               format: date-time
+ *                             isInactive:
+ *                               type: boolean
+ *                             inactiveSince:
+ *                               type: string
+ *                               format: date-time
+ *                             removalEligibleAt:
+ *                               type: string
+ *                               format: date-time
+ *                       sentTransfers:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             receiverId:
+ *                               type: integer
+ *                             amount:
+ *                               type: number
+ *                             fee:
+ *                               type: number
+ *                             netAmount:
+ *                               type: number
+ *                             currency:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             transactionHash:
+ *                               type: string
+ *                             notes:
+ *                               type: string
+ *                             createdAt:
+ *                               type: string
+ *                               format: date-time
+ *                             receiver:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 firstName:
+ *                                   type: string
+ *                                 email:
+ *                                   type: string
+ *                       receivedTransfers:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             senderId:
+ *                               type: integer
+ *                             amount:
+ *                               type: number
+ *                             fee:
+ *                               type: number
+ *                             netAmount:
+ *                               type: number
+ *                             currency:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             transactionHash:
+ *                               type: string
+ *                             notes:
+ *                               type: string
+ *                             createdAt:
+ *                               type: string
+ *                               format: date-time
+ *                             sender:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 firstName:
+ *                                   type: string
+ *                                 email:
+ *                                   type: string
+ *                       deposits:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             vaultId:
+ *                               type: integer
+ *                             amount:
+ *                               type: number
+ *                             currency:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             transactionHash:
+ *                               type: string
+ *                             notes:
+ *                               type: string
+ *                             createdAt:
+ *                               type: string
+ *                               format: date-time
+ *                             vault:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 address:
+ *                                   type: string
+ *                                 name:
+ *                                   type: string
+ *                                 totalBalance:
+ *                                   type: number
+ *                       withdrawals:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             vaultId:
+ *                               type: integer
+ *                             amount:
+ *                               type: number
+ *                             currency:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             transactionHash:
+ *                               type: string
+ *                             notes:
+ *                               type: string
+ *                             createdAt:
+ *                               type: string
+ *                               format: date-time
+ *                             vault:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: integer
+ *                                 address:
+ *                                   type: string
+ *                                 name:
+ *                                   type: string
+ *                                 totalBalance:
+ *                                   type: number
+ *                       externalTransfers:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: integer
+ *                             fromWallet:
+ *                               type: string
+ *                             toExternalWallet:
+ *                               type: string
+ *                             amount:
+ *                               type: number
+ *                             fee:
+ *                               type: number
+ *                             netAmount:
+ *                               type: number
+ *                             currency:
+ *                               type: string
+ *                             status:
+ *                               type: string
+ *                             transactionHash:
+ *                               type: string
+ *                             feeWalletAddress:
+ *                               type: string
+ *                             notes:
+ *                               type: string
+ *                             createdAt:
+ *                               type: string
+ *                               format: date-time
+ *                             fees:
+ *                               type: array
+ *                               items:
+ *                                 type: object
+ *                                 properties:
+ *                                   id:
+ *                                     type: integer
+ *                                   amount:
+ *                                     type: number
+ *                                   currency:
+ *                                     type: string
+ *                                   feeRate:
+ *                                     type: number
+ *                                   feeWalletAddress:
+ *                                     type: string
+ *                                   status:
+ *                                     type: string
+ *                                   createdAt:
+ *                                     type: string
+ *                                     format: date-time
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     offset:
+ *                       type: integer
+ *                     hasMore:
+ *                       type: boolean
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalUsers:
+ *                       type: integer
+ *                     activeUsers:
+ *                       type: integer
+ *                     usersWithMultisig:
+ *                       type: integer
+ *                     totalBalance:
+ *                       type: number
+ *                     totalTransfers:
+ *                       type: integer
+ *                     totalDeposits:
+ *                       type: integer
+ *                     totalWithdrawals:
+ *                       type: integer
+ *                     totalExternalTransfers:
+ *                       type: integer
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/all', async (req: Request, res: Response) => {
+  try {
+    const {
+      includeInactive = 'false',
+      includeMultisig = 'true',
+      includeTransactions = 'true',
+      limit = '100',
+      offset = '0'
+    } = req.query;
+
+    // Parse parameters
+    const includeInactiveUsers = includeInactive === 'true';
+    const includeMultisigDetails = includeMultisig === 'true';
+    const includeTransactionHistory = includeTransactions === 'true';
+    const limitNum = Math.min(parseInt(limit as string) || 100, 1000); // Max 1000 users
+    const offsetNum = Math.max(parseInt(offset as string) || 0, 0);
+
+    // Build include object based on parameters
+    const include: any = {};
+
+    if (includeMultisigDetails) {
+      include.multisigMembers = {
+        include: {
+          multisig: {
+            select: {
+              id: true,
+              multisigPda: true,
+              name: true,
+              threshold: true,
+              timeLock: true,
+              isActive: true,
+              createdAt: true
+            }
+          }
+        }
+      };
+    }
+
+    if (includeTransactionHistory) {
+      include.sentTransfers = {
+        include: {
+          receiver: {
+            select: {
+              id: true,
+              firstName: true,
+              email: true
+            }
+          },
+          fees: {
+            select: {
+              id: true,
+              amount: true,
+              currency: true,
+              feeRate: true,
+              status: true,
+              createdAt: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50 // Limit to last 50 transfers
+      };
+
+      include.receivedTransfers = {
+        include: {
+          sender: {
+            select: {
+              id: true,
+              firstName: true,
+              email: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50 // Limit to last 50 transfers
+      };
+
+      include.deposits = {
+        include: {
+          vault: {
+            select: {
+              id: true,
+              address: true,
+              name: true,
+              totalBalance: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50 // Limit to last 50 deposits
+      };
+
+      include.withdrawals = {
+        include: {
+          vault: {
+            select: {
+              id: true,
+              address: true,
+              name: true,
+              totalBalance: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50 // Limit to last 50 withdrawals
+      };
+
+      include.externalTransfers = {
+        include: {
+          fees: {
+            select: {
+              id: true,
+              amount: true,
+              currency: true,
+              feeRate: true,
+              feeWalletAddress: true,
+              status: true,
+              createdAt: true
+            }
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50 // Limit to last 50 external transfers
+      };
+    }
+
+    // Get total count for pagination
+    const totalCount = await prisma.user.count({
+      where: includeInactiveUsers ? {} : { hasMultisig: true }
+    });
+
+    // Get users with all details
+    const users = await prisma.user.findMany({
+      where: includeInactiveUsers ? {} : { hasMultisig: true },
+      include,
+      orderBy: { createdAt: 'desc' },
+      take: limitNum,
+      skip: offsetNum
+    });
+
+    // Calculate summary statistics
+    const summary = await calculateUserSummary();
+
+    // Format response
+    const formattedUsers = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      firstName: user.firstName,
+      phoneNumber: user.phoneNumber,
+      solanaWallet: user.solanaWallet,
+      balance: Number(user.balance),
+      multisigPda: user.multisigPda,
+      multisigCreateKey: user.multisigCreateKey,
+      multisigThreshold: user.multisigThreshold,
+      multisigTimeLock: user.multisigTimeLock,
+      hasMultisig: user.hasMultisig,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      ...(includeMultisigDetails && {
+        multisigMembers: user.multisigMembers?.map(member => ({
+          id: member.id,
+          publicKey: member.publicKey,
+          permissions: member.permissions,
+          isActive: member.isActive,
+          lastActivityAt: member.lastActivityAt,
+          isInactive: member.isInactive,
+          inactiveSince: member.inactiveSince,
+          removalEligibleAt: member.removalEligibleAt,
+          multisig: member.multisig
+        }))
+      }),
+      ...(includeTransactionHistory && {
+        sentTransfers: user.sentTransfers?.map(transfer => ({
+          id: transfer.id,
+          receiverId: transfer.receiverId,
+          amount: Number(transfer.amount),
+          fee: Number(transfer.fee),
+          netAmount: Number(transfer.netAmount),
+          currency: transfer.currency,
+          status: transfer.status,
+          transactionHash: transfer.transactionHash,
+          notes: transfer.notes,
+          createdAt: transfer.createdAt,
+          receiver: transfer.receiver
+        })),
+        receivedTransfers: user.receivedTransfers?.map(transfer => ({
+          id: transfer.id,
+          senderId: transfer.senderId,
+          amount: Number(transfer.amount),
+          fee: Number(transfer.fee),
+          netAmount: Number(transfer.netAmount),
+          currency: transfer.currency,
+          status: transfer.status,
+          transactionHash: transfer.transactionHash,
+          notes: transfer.notes,
+          createdAt: transfer.createdAt,
+          sender: transfer.sender
+        })),
+        deposits: user.deposits?.map(deposit => ({
+          id: deposit.id,
+          vaultId: deposit.vaultId,
+          amount: Number(deposit.amount),
+          currency: deposit.currency,
+          status: deposit.status,
+          transactionHash: deposit.transactionHash,
+          notes: deposit.notes,
+          createdAt: deposit.createdAt,
+          vault: deposit.vault
+        })),
+        withdrawals: user.withdrawals?.map(withdrawal => ({
+          id: withdrawal.id,
+          vaultId: withdrawal.vaultId,
+          amount: Number(withdrawal.amount),
+          currency: withdrawal.currency,
+          status: withdrawal.status,
+          transactionHash: withdrawal.transactionHash,
+          notes: withdrawal.notes,
+          createdAt: withdrawal.createdAt,
+          vault: withdrawal.vault
+        })),
+        externalTransfers: user.externalTransfers?.map(transfer => ({
+          id: transfer.id,
+          fromWallet: transfer.fromWallet,
+          toExternalWallet: transfer.toExternalWallet,
+          amount: Number(transfer.amount),
+          fee: Number(transfer.fee),
+          netAmount: Number(transfer.netAmount),
+          currency: transfer.currency,
+          status: transfer.status,
+          transactionHash: transfer.transactionHash,
+          feeWalletAddress: transfer.feeWalletAddress,
+          notes: transfer.notes,
+          createdAt: transfer.createdAt,
+          fees: transfer.fees?.map(fee => ({
+            id: fee.id,
+            amount: Number(fee.amount),
+            currency: fee.currency,
+            feeRate: Number(fee.feeRate),
+            feeWalletAddress: fee.feeWalletAddress,
+            status: fee.status,
+            createdAt: fee.createdAt
+          }))
+        }))
+      })
+    }));
+
+    res.json({
+      users: formattedUsers,
+      pagination: {
+        total: totalCount,
+        limit: limitNum,
+        offset: offsetNum,
+        hasMore: offsetNum + limitNum < totalCount
+      },
+      summary
+    });
+
+  } catch (error) {
+    console.error('Error fetching all users:', error);
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Prisma') || error.message.includes('database')) {
+        return res.status(500).json({
+          message: 'Database error',
+          error: 'Internal Server Error',
+          details: 'Please try again later'
+        });
+      }
+    }
+    
+    res.status(500).json({
+      message: 'Failed to fetch users',
+      error: 'Internal Server Error',
+      details: error instanceof Error ? error.message : 'Unknown error occurred'
+    });
+  }
+});
+
+/**
+ * Calculate summary statistics for all users
+ */
+async function calculateUserSummary() {
+  try {
+    const [
+      totalUsers,
+      activeUsers,
+      usersWithMultisig,
+      totalBalanceResult,
+      totalTransfers,
+      totalDeposits,
+      totalWithdrawals,
+      totalExternalTransfers
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { hasMultisig: true } }),
+      prisma.user.count({ where: { hasMultisig: true } }),
+      prisma.user.aggregate({
+        _sum: { balance: true }
+      }),
+      prisma.transfer.count(),
+      prisma.deposit.count(),
+      prisma.withdrawal.count(),
+      prisma.externalTransfer.count()
+    ]);
+
+    return {
+      totalUsers,
+      activeUsers,
+      usersWithMultisig,
+      totalBalance: Number(totalBalanceResult._sum.balance || 0),
+      totalTransfers,
+      totalDeposits,
+      totalWithdrawals,
+      totalExternalTransfers
+    };
+  } catch (error) {
+    console.error('Error calculating user summary:', error);
+    return {
+      totalUsers: 0,
+      activeUsers: 0,
+      usersWithMultisig: 0,
+      totalBalance: 0,
+      totalTransfers: 0,
+      totalDeposits: 0,
+      totalWithdrawals: 0,
+      totalExternalTransfers: 0
+    };
+  }
+}
+
+/**
  * Get counts of deleted data for response
  */
 async function getDeletedDataCounts(userId: number, user: any) {
