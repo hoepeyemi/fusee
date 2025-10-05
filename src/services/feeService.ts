@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import DedicatedWalletService from './dedicatedWallet';
 import FeeWalletService from './feeWalletService';
+import UnifiedVaultService from './unifiedVaultService';
 
 export class FeeService {
   private static readonly FEE_RATE = 0.00001; // 0.001% = 0.00001
@@ -33,9 +34,18 @@ export class FeeService {
     const feeWalletAddress = feeWallet.getFeeWalletAddress();
     const feeWalletName = feeWallet.getFeeWalletName();
 
-    // Get the main vault for record keeping (but fees go to fee wallet)
-    const dedicatedWallet = DedicatedWalletService.getInstance();
-    const vault = await dedicatedWallet.getOrCreateVault(currency);
+    // Get the main vault for record keeping (with fallback mechanism)
+    const unifiedVault = UnifiedVaultService.getInstance();
+    const vaultInfo = await unifiedVault.getVault(currency);
+    
+    // Get the actual vault record from database
+    const vault = await prisma.vault.findUnique({
+      where: { address: vaultInfo.address }
+    });
+    
+    if (!vault) {
+      throw new Error(`Vault not found: ${vaultInfo.address}`);
+    }
 
     // Create fee record with fee wallet information
     const feeRecord = await prisma.fee.create({
@@ -61,6 +71,7 @@ export class FeeService {
 
     console.log(`💰 Fee collected: ${fee} ${currency} (${this.FEE_RATE * 100}% of ${amount})`);
     console.log(`💰 Fee sent to dedicated wallet: ${feeWalletAddress} (${feeWalletName})`);
+    console.log(`🏦 Vault type: ${vaultInfo.vaultType} (${vaultInfo.isSecure ? 'Secure' : 'Fallback'})`);
 
     return { fee, netAmount, feeWalletAddress };
   }
@@ -140,10 +151,10 @@ export class FeeService {
    * Get vault fee balance
    */
   public static async getVaultFeeBalance(currency: string = 'SOL'): Promise<number> {
-    const dedicatedWallet = DedicatedWalletService.getInstance();
-    const vault = await dedicatedWallet.getOrCreateVault(currency);
+    const unifiedVault = UnifiedVaultService.getInstance();
+    const vaultInfo = await unifiedVault.getVault(currency);
     
-    return Number(vault.feeBalance);
+    return vaultInfo.feeBalance;
   }
 
   /**
