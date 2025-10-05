@@ -12,6 +12,25 @@ export interface TransferProposalRequest {
   userId?: number;
 }
 
+export interface YieldInvestmentProposalRequest {
+  userId: number;
+  owner: string;
+  amount: number;
+  type: 'protected' | 'regular' | 'both';
+  regularAmount?: number;
+  protectedAmount?: number;
+  referrer?: string;
+  transaction: string;
+}
+
+export interface YieldWithdrawalProposalRequest {
+  userId: number;
+  owner: string;
+  amount: number;
+  type: 'protected' | 'regular' | 'regular_completion';
+  transaction: string;
+}
+
 export interface MultisigProposalResult {
   proposalId: number;
   multisigPda: string;
@@ -397,6 +416,81 @@ export class MultisigProposalService {
   }
 
   /**
+   * Check if a proposal can be executed based on time lock
+   */
+  private canExecuteProposal(proposal: any): { canExecute: boolean; reason?: string; timeRemaining?: number } {
+    if (!proposal.multisig.timeLock || proposal.multisig.timeLock === 0) {
+      return { canExecute: true };
+    }
+
+    // Find the latest approval timestamp
+    const latestApproval = proposal.approvals.reduce((latest: any, approval: any) => {
+      return approval.createdAt > latest.createdAt ? approval : latest;
+    }, proposal.approvals[0]);
+
+    if (!latestApproval) {
+      return { canExecute: false, reason: 'No approvals found' };
+    }
+
+    const approvalTime = new Date(latestApproval.createdAt).getTime();
+    const currentTime = Date.now();
+    const timeElapsed = Math.floor((currentTime - approvalTime) / 1000); // Convert to seconds
+    const timeRemaining = proposal.multisig.timeLock - timeElapsed;
+
+    if (timeRemaining > 0) {
+      return {
+        canExecute: false,
+        reason: `Time lock not expired. ${timeRemaining} seconds remaining`,
+        timeRemaining
+      };
+    }
+
+    return { canExecute: true };
+  }
+
+  /**
+   * Get time lock status for a proposal
+   */
+  async getProposalTimeLockStatus(proposalId: number): Promise<{
+    canExecute: boolean;
+    timeLock: number;
+    timeRemaining?: number;
+    reason?: string;
+    latestApprovalTime?: Date;
+  }> {
+    try {
+      const proposal = await prisma.multisigTransaction.findUnique({
+        where: { id: proposalId },
+        include: {
+          multisig: true,
+          approvals: {
+            orderBy: { createdAt: 'desc' },
+            take: 1
+          }
+        }
+      });
+
+      if (!proposal) {
+        throw new Error('Proposal not found');
+      }
+
+      const timeLockStatus = this.canExecuteProposal(proposal);
+      const latestApproval = proposal.approvals[0];
+
+      return {
+        canExecute: timeLockStatus.canExecute,
+        timeLock: proposal.multisig.timeLock,
+        timeRemaining: timeLockStatus.timeRemaining,
+        reason: timeLockStatus.reason,
+        latestApprovalTime: latestApproval?.createdAt
+      };
+    } catch (error) {
+      console.error('Error getting proposal time lock status:', error);
+      throw new Error(`Failed to get time lock status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Execute an approved proposal
    */
   async executeProposal(proposalId: number, executorPublicKey: string): Promise<boolean> {
@@ -415,6 +509,12 @@ export class MultisigProposalService {
 
       if (proposal.status !== 'APPROVED') {
         throw new Error('Proposal must be approved before execution');
+      }
+
+      // Check time lock before execution
+      const timeLockStatus = this.canExecuteProposal(proposal);
+      if (!timeLockStatus.canExecute) {
+        throw new Error(`Cannot execute proposal: ${timeLockStatus.reason}`);
       }
 
       // Check if executor is a member
@@ -474,6 +574,9 @@ export class MultisigProposalService {
         throw new Error('Proposal not found');
       }
 
+      // Get time lock status
+      const timeLockStatus = this.canExecuteProposal(proposal);
+
       return {
         id: proposal.id,
         status: proposal.status,
@@ -485,6 +588,10 @@ export class MultisigProposalService {
         transactionHash: proposal.transactionHash,
         approvals: proposal.approvals.length,
         threshold: proposal.multisig.threshold,
+        timeLock: proposal.multisig.timeLock,
+        canExecute: timeLockStatus.canExecute,
+        timeRemaining: timeLockStatus.timeRemaining,
+        timeLockReason: timeLockStatus.reason,
         createdAt: proposal.createdAt,
         updatedAt: proposal.updatedAt
       };
@@ -492,6 +599,146 @@ export class MultisigProposalService {
     } catch (error) {
       console.error('Error getting proposal status:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Create a multisig transaction proposal for yield investment
+   */
+  async createYieldInvestmentProposal(request: YieldInvestmentProposalRequest): Promise<MultisigProposalResult> {
+    try {
+      // Validate request
+      if (!request.owner) {
+        throw new Error('Owner address is required');
+      }
+
+      if (!request.amount || request.amount <= 0) {
+        throw new Error('Invalid amount');
+      }
+
+      if (!request.transaction) {
+        throw new Error('Transaction is required');
+      }
+
+      // Get main multisig PDA
+      const multisigPda = await MultisigService.getMainMultisigPda();
+      if (!multisigPda) {
+        throw new Error('No main multisig found. Please create a multisig first.');
+      }
+
+      // Get multisig from database
+      const multisig = await prisma.multisig.findUnique({
+        where: { multisigPda },
+        include: {
+          members: {
+            where: { isActive: true }
+          }
+        }
+      });
+
+      if (!multisig) {
+        throw new Error('Multisig not found in database');
+      }
+
+      if (multisig.members.length === 0) {
+        throw new Error('No active members found for multisig');
+      }
+
+      // Create proposal in database
+      const proposal = await prisma.multisigTransferProposal.create({
+        data: {
+          fromWallet: request.owner,
+          toWallet: 'LULO_YIELD_POOL',
+          amount: request.amount,
+          netAmount: request.amount,
+          fee: 0,
+          currency: 'USDC',
+          status: 'PENDING',
+          requestedBy: request.userId.toString(),
+          multisigPda: multisigPda,
+          notes: `Yield investment: ${request.type} - ${request.amount} USDC`
+        }
+      });
+
+      return {
+        proposalId: proposal.id,
+        multisigPda,
+        transactionIndex: proposal.id.toString(),
+        status: 'PENDING',
+        message: `Yield investment proposal created successfully. Proposal ID: ${proposal.id}`
+      };
+
+    } catch (error) {
+      console.error('Error creating yield investment proposal:', error);
+      throw new Error(`Failed to create yield investment proposal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Create a multisig transaction proposal for yield withdrawal
+   */
+  async createYieldWithdrawalProposal(request: YieldWithdrawalProposalRequest): Promise<MultisigProposalResult> {
+    try {
+      // Validate request
+      if (!request.owner) {
+        throw new Error('Owner address is required');
+      }
+
+      if (!request.transaction) {
+        throw new Error('Transaction is required');
+      }
+
+      // Get main multisig PDA
+      const multisigPda = await MultisigService.getMainMultisigPda();
+      if (!multisigPda) {
+        throw new Error('No main multisig found. Please create a multisig first.');
+      }
+
+      // Get multisig from database
+      const multisig = await prisma.multisig.findUnique({
+        where: { multisigPda },
+        include: {
+          members: {
+            where: { isActive: true }
+          }
+        }
+      });
+
+      if (!multisig) {
+        throw new Error('Multisig not found in database');
+      }
+
+      if (multisig.members.length === 0) {
+        throw new Error('No active members found for multisig');
+      }
+
+      // Create proposal in database
+      const proposal = await prisma.multisigTransferProposal.create({
+        data: {
+          fromWallet: 'LULO_YIELD_POOL',
+          toWallet: request.owner,
+          amount: request.amount,
+          netAmount: request.amount,
+          fee: 0,
+          currency: 'USDC',
+          status: 'PENDING',
+          requestedBy: request.userId.toString(),
+          multisigPda: multisigPda,
+          notes: `Yield withdrawal: ${request.type} - ${request.amount} USDC`
+        }
+      });
+
+      return {
+        proposalId: proposal.id,
+        multisigPda,
+        transactionIndex: proposal.id.toString(),
+        status: 'PENDING',
+        message: `Yield withdrawal proposal created successfully. Proposal ID: ${proposal.id}`
+      };
+
+    } catch (error) {
+      console.error('Error creating yield withdrawal proposal:', error);
+      throw new Error(`Failed to create yield withdrawal proposal: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

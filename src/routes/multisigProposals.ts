@@ -361,8 +361,114 @@ router.post('/:proposalId/execute', async (req: Request, res: Response) => {
 
   } catch (error) {
     console.error('Error executing proposal:', error);
+    
+    // Handle time lock specific errors
+    if (error instanceof Error && error.message.includes('Time lock not expired')) {
+      return res.status(400).json({
+        message: 'Cannot execute proposal',
+        error: 'Time Lock Active',
+        details: error.message
+      });
+    }
+    
+    // Handle other specific errors
+    if (error instanceof Error && (
+      error.message.includes('Proposal not found') ||
+      error.message.includes('must be approved') ||
+      error.message.includes('must be a multisig member')
+    )) {
+      return res.status(400).json({
+        message: 'Cannot execute proposal',
+        error: 'Bad Request',
+        details: error.message
+      });
+    }
+    
     res.status(500).json({
       message: 'Failed to execute proposal',
+      error: 'Internal Server Error',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/multisig-proposals/{proposalId}/time-lock-status:
+ *   get:
+ *     summary: Get proposal time lock status
+ *     tags: [Multisig Proposals]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: path
+ *         name: proposalId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Proposal ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Time lock status retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 canExecute:
+ *                   type: boolean
+ *                   description: Whether the proposal can be executed
+ *                 timeLock:
+ *                   type: integer
+ *                   description: Time lock duration in seconds
+ *                 timeRemaining:
+ *                   type: integer
+ *                   description: Time remaining in seconds (if applicable)
+ *                 reason:
+ *                   type: string
+ *                   description: Reason why proposal cannot be executed (if applicable)
+ *                 latestApprovalTime:
+ *                   type: string
+ *                   format: date-time
+ *                   description: Time of the latest approval
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
+router.get('/:proposalId/time-lock-status', async (req: Request, res: Response) => {
+  try {
+    const { proposalId } = req.params;
+    const proposalIdNum = parseInt(proposalId);
+
+    if (isNaN(proposalIdNum)) {
+      return res.status(400).json({
+        message: 'Invalid proposal ID',
+        error: 'Bad Request'
+      });
+    }
+
+    const proposalService = MultisigProposalService.getInstance();
+    const timeLockStatus = await proposalService.getProposalTimeLockStatus(proposalIdNum);
+
+    res.json({
+      message: 'Time lock status retrieved successfully',
+      ...timeLockStatus
+    });
+
+  } catch (error) {
+    console.error('Error getting time lock status:', error);
+    res.status(500).json({
+      message: 'Failed to get time lock status',
       error: 'Internal Server Error',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
@@ -413,6 +519,18 @@ router.post('/:proposalId/execute', async (req: Request, res: Response) => {
  *                   type: integer
  *                 threshold:
  *                   type: integer
+ *                 timeLock:
+ *                   type: integer
+ *                   description: Time lock duration in seconds
+ *                 canExecute:
+ *                   type: boolean
+ *                   description: Whether the proposal can be executed
+ *                 timeRemaining:
+ *                   type: integer
+ *                   description: Time remaining in seconds (if applicable)
+ *                 timeLockReason:
+ *                   type: string
+ *                   description: Reason why proposal cannot be executed (if applicable)
  *                 createdAt:
  *                   type: string
  *                   format: date-time

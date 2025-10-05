@@ -15,6 +15,7 @@ import multisigTransferRoutes from './routes/multisigTransfers';
 import multisigStatusRoutes from './routes/multisigStatus';
 import multisigProposalRoutes from './routes/multisigProposals';
 import treasuryVaultRoutes from './routes/treasuryVault';
+import yieldInvestmentRoutes from './routes/yieldInvestments';
 import { BackgroundJobs } from './services/backgroundJobs';
 import { 
   helmetMiddleware, 
@@ -110,6 +111,7 @@ app.use('/api/multisig-transfers', verifyCSRFToken, multisigTransferRoutes);
 app.use('/api/multisig-status', verifyCSRFToken, multisigStatusRoutes);
 app.use('/api/multisig-proposals', verifyCSRFToken, multisigProposalRoutes);
 app.use('/api/treasury-vault', verifyCSRFToken, treasuryVaultRoutes);
+app.use('/api/yield-investments', verifyCSRFToken, yieldInvestmentRoutes);
 
 /**
  * @swagger

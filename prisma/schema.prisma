@@ -36,6 +36,7 @@ model User {
   withdrawals       Withdrawal[] @relation("UserWithdrawals")
   externalTransfers ExternalTransfer[] @relation("UserExternalTransfers")
   multisigMembers   MultisigMember[] @relation("UserMultisigMembers")
+  yieldInvestments  YieldInvestment[] @relation("UserYieldInvestments")
 
   @@map("users")
 }
@@ -453,4 +454,35 @@ enum TreasuryOperationStatus {
   EXECUTED
   REJECTED
   FAILED
+}
+
+model YieldInvestment {
+  id              Int      @id @default(autoincrement())
+  userId          Int      // User who made the investment
+  owner           String   // Owner wallet address
+  type            String   // Investment type: PROTECTED, REGULAR, BOTH, PROTECTED_WITHDRAWAL, REGULAR_WITHDRAWAL_INIT, REGULAR_WITHDRAWAL_COMPLETE, REFERRER_INIT
+  amount          Decimal  @db.Decimal(18, 8) // Total amount
+  regularAmount   Decimal? @db.Decimal(18, 8) // Regular (boosted) amount
+  protectedAmount Decimal? @db.Decimal(18, 8) // Protected amount
+  status          YieldInvestmentStatus @default(PENDING)
+  transactionHash String?  // Blockchain transaction hash
+  luloAccount     String?  // Lulo account address
+  referrerAccount String?  // Referrer account address
+  proposalId      Int?     // Associated multisig proposal ID
+  notes           String?  // Optional notes
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  user            User     @relation("UserYieldInvestments", fields: [userId], references: [id])
+
+  @@map("yield_investments")
+}
+
+enum YieldInvestmentStatus {
+  PENDING
+  PENDING_APPROVAL
+  COMPLETED
+  FAILED
+  CANCELLED
 }
