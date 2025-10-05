@@ -27,7 +27,7 @@ export class WalletTransferService {
     fromWallet: string,
     toWallet: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string
   ): Promise<{
     proposalId: number;
@@ -53,11 +53,11 @@ export class WalletTransferService {
       }
 
       if (amount > 1000000) {
-        throw new Error('Amount cannot exceed 1,000,000 SOL');
+        throw new Error('Amount cannot exceed 1,000,000 USDC');
       }
 
-      if (!currency || !['SOL', 'USDC', 'USDT'].includes(currency)) {
-        throw new Error('Currency must be SOL, USDC, or USDT');
+      if (!currency || currency !== 'USDC') {
+        throw new Error('Only USDC transfers are allowed between wallet addresses');
       }
 
       const { fee, netAmount } = this.calculateFee(amount);
@@ -140,7 +140,7 @@ export class WalletTransferService {
     fromWallet: string,
     toWallet: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string,
     connection?: Connection
   ): Promise<{
@@ -151,6 +151,11 @@ export class WalletTransferService {
     feeTransactionHash: string;
     mainTransactionHash: string;
   }> {
+    // Validate currency - only USDC allowed for wallet transfers
+    if (currency !== 'USDC') {
+      throw new Error('Only USDC transfers are allowed between wallet addresses');
+    }
+
     const { fee, netAmount } = this.calculateFee(amount);
 
     // Initialize real fee transaction service if connection provided
@@ -222,7 +227,7 @@ export class WalletTransferService {
     fromWallet: string,
     toWallet: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string
   ): Promise<{
     transferId: number;
@@ -231,6 +236,11 @@ export class WalletTransferService {
     feeWalletAddress: string;
     transactionHash: string;
   }> {
+    // Validate currency - only USDC allowed for wallet transfers
+    if (currency !== 'USDC') {
+      throw new Error('Only USDC transfers are allowed between wallet addresses');
+    }
+
     const { fee, netAmount } = this.calculateFee(amount);
 
     // Get the fee wallet service

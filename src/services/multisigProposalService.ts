@@ -56,6 +56,11 @@ export class MultisigProposalService {
         throw new Error('Currency is required');
       }
 
+      // Validate currency - only USDC allowed for wallet transfers
+      if (request.currency !== 'USDC') {
+        throw new Error('Only USDC transfers are allowed between wallet addresses');
+      }
+
       // Get main multisig PDA
       const multisigPda = await MultisigService.getMainMultisigPda();
       if (!multisigPda) {

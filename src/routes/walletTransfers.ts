@@ -41,8 +41,8 @@ const router = Router();
  *                 example: 1.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - only USDC allowed for wallet transfers
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional transfer notes
@@ -93,7 +93,7 @@ const router = Router();
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { fromWallet, toWallet, amount, currency = 'SOL', notes, requestedBy } = req.body;
+    const { fromWallet, toWallet, amount, currency = 'USDC', notes, requestedBy } = req.body;
 
     // Validate input
     if (!fromWallet || !toWallet || !amount) {
@@ -101,6 +101,15 @@ router.post('/', async (req: Request, res: Response) => {
         message: 'Missing required fields',
         error: 'Bad Request',
         required: ['fromWallet', 'toWallet', 'amount']
+      });
+    }
+
+    // Validate currency - only USDC allowed for wallet transfers
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC transfers are allowed between wallet addresses'
       });
     }
 
@@ -193,7 +202,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     if (transferAmount > 1000000) {
       return res.status(400).json({
-        message: 'Amount cannot exceed 1,000,000',
+        message: 'Amount cannot exceed 1,000,000 USDC',
         error: 'Bad Request'
       });
     }
@@ -557,8 +566,8 @@ router.post('/fees/calculate', async (req: Request, res: Response) => {
  *                 example: 1.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - only USDC allowed for wallet transfers
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional transfer notes
@@ -600,7 +609,7 @@ router.post('/fees/calculate', async (req: Request, res: Response) => {
  */
 router.post('/real-fees', async (req: Request, res: Response) => {
   try {
-    const { fromWallet, toWallet, amount, currency = 'SOL', notes } = req.body;
+    const { fromWallet, toWallet, amount, currency = 'USDC', notes } = req.body;
 
     // Validate input
     if (!fromWallet || !toWallet || !amount) {
@@ -608,6 +617,15 @@ router.post('/real-fees', async (req: Request, res: Response) => {
         message: 'Missing required fields',
         error: 'Bad Request',
         required: ['fromWallet', 'toWallet', 'amount']
+      });
+    }
+
+    // Validate currency - only USDC allowed for wallet transfers
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC transfers are allowed between wallet addresses'
       });
     }
 
@@ -622,7 +640,7 @@ router.post('/real-fees', async (req: Request, res: Response) => {
 
     if (transferAmount > 1000000) {
       return res.status(400).json({
-        message: 'Amount cannot exceed 1,000,000',
+        message: 'Amount cannot exceed 1,000,000 USDC',
         error: 'Bad Request'
       });
     }
