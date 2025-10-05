@@ -71,7 +71,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/', validateTransfer, handleValidationErrors, async (req: Request, res: Response) => {
+router.post('/', validateTransfer, async (req: Request, res: Response) => {
   try {
     const { senderId, receiverFirstName, amount, currency = 'SOL', notes } = req.body;
 
