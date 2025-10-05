@@ -412,6 +412,7 @@ model MultisigTransferProposal {
   multisigPda   String   // Multisig PDA for approval
   proposalId    String?  // External proposal ID (if any)
   transactionHash String? // Blockchain transaction hash
+  transactionData String? // JSON string containing Lulo instructions or other transaction data
   notes         String?  // Optional transfer notes
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

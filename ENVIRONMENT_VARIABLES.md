@@ -24,6 +24,23 @@ RPC_URL="https://api.devnet.solana.com"
 SOLANA_NETWORK="devnet"
 ```
 
+## Lulo.fi API Configuration
+
+### Boosted Yield Investment API
+```bash
+# Lulo.fi API key for boosted yield investments
+LULO_API_KEY="your-lulo-api-key-here"
+
+# Optional: Priority fee in lamports (default: 50000)
+LULO_PRIORITY_FEE="50000"
+```
+
+**Important Notes:**
+- `LULO_API_KEY` is required for boosted yield investment functionality
+- You can get your API key from your Lulo.fi project overview
+- The API key is used to generate transactions and instructions for yield investments
+- Priority fee can be adjusted based on network conditions
+
 ## Multisig Configuration
 
 ### Default Multisig Members

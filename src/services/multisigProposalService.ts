@@ -16,11 +16,11 @@ export interface YieldInvestmentProposalRequest {
   userId: number;
   owner: string;
   amount: number;
-  type: 'protected' | 'regular' | 'both';
+  type: 'protected' | 'regular' | 'both' | 'referrer_init';
   regularAmount?: number;
   protectedAmount?: number;
   referrer?: string;
-  transaction: string;
+  transaction: any; // Lulo instructions object
 }
 
 export interface YieldWithdrawalProposalRequest {
@@ -28,7 +28,8 @@ export interface YieldWithdrawalProposalRequest {
   owner: string;
   amount: number;
   type: 'protected' | 'regular' | 'regular_completion';
-  transaction: string;
+  pendingWithdrawalId?: number;
+  transaction: any; // Lulo instructions object
 }
 
 export interface MultisigProposalResult {
@@ -612,7 +613,8 @@ export class MultisigProposalService {
         throw new Error('Owner address is required');
       }
 
-      if (!request.amount || request.amount <= 0) {
+      // For referrer_init, amount can be 0
+      if (request.type !== 'referrer_init' && (!request.amount || request.amount <= 0)) {
         throw new Error('Invalid amount');
       }
 
@@ -656,7 +658,10 @@ export class MultisigProposalService {
           status: 'PENDING',
           requestedBy: request.userId.toString(),
           multisigPda: multisigPda,
-          notes: `Yield investment: ${request.type} - ${request.amount} USDC`
+          notes: request.type === 'referrer_init' 
+            ? 'Initialize referrer account for boosted yield'
+            : `Boosted yield investment: ${request.type} - ${request.amount} USDC`,
+          transactionData: JSON.stringify(request.transaction) // Store Lulo instructions
         }
       });
 
@@ -665,7 +670,7 @@ export class MultisigProposalService {
         multisigPda,
         transactionIndex: proposal.id.toString(),
         status: 'PENDING',
-        message: `Yield investment proposal created successfully. Proposal ID: ${proposal.id}`
+        message: `Boosted yield investment proposal created successfully. Proposal ID: ${proposal.id}`
       };
 
     } catch (error) {
@@ -724,7 +729,8 @@ export class MultisigProposalService {
           status: 'PENDING',
           requestedBy: request.userId.toString(),
           multisigPda: multisigPda,
-          notes: `Yield withdrawal: ${request.type} - ${request.amount} USDC`
+          notes: `Boosted yield withdrawal: ${request.type} - ${request.amount} USDC`,
+          transactionData: JSON.stringify(request.transaction) // Store Lulo instructions
         }
       });
 
@@ -733,7 +739,7 @@ export class MultisigProposalService {
         multisigPda,
         transactionIndex: proposal.id.toString(),
         status: 'PENDING',
-        message: `Yield withdrawal proposal created successfully. Proposal ID: ${proposal.id}`
+        message: `Boosted yield withdrawal proposal created successfully. Proposal ID: ${proposal.id}`
       };
 
     } catch (error) {

@@ -16,6 +16,7 @@ import multisigStatusRoutes from './routes/multisigStatus';
 import multisigProposalRoutes from './routes/multisigProposals';
 import treasuryVaultRoutes from './routes/treasuryVault';
 import yieldInvestmentRoutes from './routes/yieldInvestments';
+import boostedYieldRoutes from './routes/boostedYield';
 import { BackgroundJobs } from './services/backgroundJobs';
 import { 
   helmetMiddleware, 
@@ -112,6 +113,7 @@ app.use('/api/multisig-status', verifyCSRFToken, multisigStatusRoutes);
 app.use('/api/multisig-proposals', verifyCSRFToken, multisigProposalRoutes);
 app.use('/api/treasury-vault', verifyCSRFToken, treasuryVaultRoutes);
 app.use('/api/yield-investments', verifyCSRFToken, yieldInvestmentRoutes);
+app.use('/api/boosted-yield', verifyCSRFToken, boostedYieldRoutes);
 
 /**
  * @swagger
@@ -175,7 +177,21 @@ app.get('/', (req: Request, res: Response) => {
           approveProposal: 'POST /api/multisig/{multisigPda}/approve',
           rejectProposal: 'POST /api/multisig/{multisigPda}/reject',
           executeTransaction: 'POST /api/multisig/{multisigPda}/execute',
-          getTransactionStatus: 'GET /api/multisig/{multisigPda}/status/{transactionIndex}'
+          getTransactionStatus: 'GET /api/multisig/{multisigPda}/status/{transactionIndex}',
+          // Boosted Yield Investment Endpoints
+          initializeReferrer: 'POST /api/boosted-yield/initialize-referrer',
+          createDeposit: 'POST /api/boosted-yield/deposit',
+          withdrawProtected: 'POST /api/boosted-yield/withdraw-protected',
+          initiateRegularWithdrawal: 'POST /api/boosted-yield/initiate-regular-withdrawal',
+          completeRegularWithdrawal: 'POST /api/boosted-yield/complete-regular-withdrawal',
+          getAccountData: 'GET /api/boosted-yield/account/{owner}',
+          getPoolData: 'GET /api/boosted-yield/pools',
+          getRates: 'GET /api/boosted-yield/rates',
+          getPendingWithdrawals: 'GET /api/boosted-yield/pending-withdrawals/{owner}',
+          getUserInvestments: 'GET /api/boosted-yield/user/{userId}',
+          getInvestment: 'GET /api/boosted-yield/investment/{investmentId}',
+          updateInvestmentStatus: 'PUT /api/boosted-yield/investment/{investmentId}/status',
+          getConfigStatus: 'GET /api/boosted-yield/config/status'
         }
   });
 });
