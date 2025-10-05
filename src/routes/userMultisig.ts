@@ -104,7 +104,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/:userId/multisig', validateUserMultisig, handleValidationErrors, async (req: Request, res: Response) => {
+router.post('/:userId/multisig', validateUserMultisig, async (req: Request, res: Response) => {
   try {
     const { userId } = req.params;
     const { name, threshold, timeLock, members } = req.body;
