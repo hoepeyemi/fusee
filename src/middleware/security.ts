@@ -216,9 +216,13 @@ export const validateTransfer = (req: Request, res: Response, next: NextFunction
     }
   }
   
-  // Validate currency (optional)
-  if (req.body.currency && typeof req.body.currency !== 'string') {
-    errors.push('Currency must be a string');
+  // Validate currency - only USDC allowed
+  if (req.body.currency) {
+    if (typeof req.body.currency !== 'string') {
+      errors.push('Currency must be a string');
+    } else if (req.body.currency !== 'USDC') {
+      errors.push('Only USDC currency is supported');
+    }
   }
   
   // Validate notes (optional)
@@ -259,9 +263,13 @@ export const validateDeposit = (req: Request, res: Response, next: NextFunction)
     }
   }
   
-  // Validate currency (optional)
-  if (req.body.currency && typeof req.body.currency !== 'string') {
-    errors.push('Currency must be a string');
+  // Validate currency - only USDC allowed
+  if (req.body.currency) {
+    if (typeof req.body.currency !== 'string') {
+      errors.push('Currency must be a string');
+    } else if (req.body.currency !== 'USDC') {
+      errors.push('Only USDC currency is supported');
+    }
   }
   
   // Validate notes (optional)
@@ -302,9 +310,13 @@ export const validateWithdrawal = (req: Request, res: Response, next: NextFuncti
     }
   }
   
-  // Validate currency (optional)
-  if (req.body.currency && typeof req.body.currency !== 'string') {
-    errors.push('Currency must be a string');
+  // Validate currency - only USDC allowed
+  if (req.body.currency) {
+    if (typeof req.body.currency !== 'string') {
+      errors.push('Currency must be a string');
+    } else if (req.body.currency !== 'USDC') {
+      errors.push('Only USDC currency is supported');
+    }
   }
   
   // Validate notes (optional)

@@ -55,7 +55,7 @@ router.post('/propose', async (req: Request, res: Response) => {
       fromWallet,
       toWallet,
       amount: parseFloat(amount),
-      currency: currency || 'SOL',
+      currency: currency || 'USDC',
       notes,
       requestedBy
     });

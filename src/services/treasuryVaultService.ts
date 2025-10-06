@@ -100,7 +100,7 @@ export class TreasuryVaultService {
     vaultId: number,
     toAddress: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string
   ): Promise<TreasuryOperation> {
     // Get vault details
@@ -187,7 +187,7 @@ export class TreasuryVaultService {
       fromAddress: 'mock_vault_address',
       toAddress: 'mock_destination_address',
       amount: 0,
-      currency: 'SOL',
+      currency: 'USDC',
       status: 'APPROVED' as const
     };
 

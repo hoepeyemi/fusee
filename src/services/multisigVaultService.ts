@@ -29,7 +29,7 @@ export class MultisigVaultService {
   /**
    * Get or create multisig vault
    */
-  async getOrCreateMultisigVault(currency: string = 'SOL'): Promise<MultisigVaultInfo> {
+  async getOrCreateMultisigVault(currency: string = 'USDC'): Promise<MultisigVaultInfo> {
     try {
       // Try to get existing multisig PDA
       let multisigPda = await MultisigService.getMainMultisigPda();

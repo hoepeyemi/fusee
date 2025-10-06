@@ -25,7 +25,7 @@ export class FeeService {
   public static async processTransferFee(
     transferId: number,
     amount: number,
-    currency: string = 'SOL'
+    currency: string = 'USDC'
   ): Promise<{ fee: number; netAmount: number; feeWalletAddress: string }> {
     const { fee, netAmount } = this.calculateFee(amount);
 

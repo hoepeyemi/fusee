@@ -28,7 +28,7 @@ export class UnifiedVaultService {
   /**
    * Get vault with automatic fallback mechanism
    */
-  async getVault(currency: string = 'SOL'): Promise<UnifiedVaultInfo> {
+  async getVault(currency: string = 'USDC'): Promise<UnifiedVaultInfo> {
     // Priority 1: Try multisig vault (most secure)
     try {
       const multisigVault = MultisigVaultService.getInstance();
@@ -122,7 +122,7 @@ export class UnifiedVaultService {
   /**
    * Update vault balance (works with any vault type)
    */
-  async updateVaultBalance(address: string, amount: number, currency: string = 'SOL') {
+  async updateVaultBalance(address: string, amount: number, currency: string = 'USDC') {
     const vault = await prisma.vault.findUnique({
       where: { address }
     });

@@ -84,7 +84,7 @@ router.get('/balance/:userId', async (req: Request, res: Response) => {
       fullName: user.fullName,
       firstName: user.firstName,
       balance: user.balance,
-      currency: 'SOL'
+      currency: 'USDC'
     });
   } catch (error) {
     console.error('Error fetching user balance:', error);
@@ -158,7 +158,16 @@ router.get('/balance/:userId', async (req: Request, res: Response) => {
  */
 router.post('/deposit', validateDeposit, handleValidationErrors, async (req: Request, res: Response) => {
   try {
-    const { userId, amount, currency = 'SOL', notes } = req.body;
+    const { userId, amount, currency = 'USDC', notes } = req.body;
+
+    // Validate currency - only USDC allowed
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC is supported for vault operations'
+      });
+    }
 
     // Find user
     const user = await prisma.user.findUnique({
@@ -312,7 +321,16 @@ router.post('/deposit', validateDeposit, handleValidationErrors, async (req: Req
  */
 router.post('/withdraw', validateWithdrawal, handleValidationErrors, async (req: Request, res: Response) => {
   try {
-    const { userId, amount, currency = 'SOL', notes } = req.body;
+    const { userId, amount, currency = 'USDC', notes } = req.body;
+
+    // Validate currency - only USDC allowed
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC is supported for vault operations'
+      });
+    }
 
     // Find user
     const user = await prisma.user.findUnique({
@@ -600,7 +618,7 @@ router.get('/fees/statistics', async (req: Request, res: Response) => {
  */
 router.get('/fees/balance', async (req: Request, res: Response) => {
   try {
-    const { currency = 'SOL' } = req.query;
+    const { currency = 'USDC' } = req.query;
     const feeBalance = await FeeService.getVaultFeeBalance(currency as string);
 
     res.json({

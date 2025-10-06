@@ -26,7 +26,7 @@ export class DedicatedWalletService {
     return process.env.DEDICATED_WALLET_NAME || 'Fusee Main Vault';
   }
 
-  public async getOrCreateVault(currency: string = 'SOL') {
+  public async getOrCreateVault(currency: string = 'USDC') {
     const currentAddress = this.getWalletAddress();
     const currentName = this.getWalletName();
     

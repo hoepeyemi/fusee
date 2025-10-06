@@ -138,7 +138,7 @@ export class MultisigTransferService {
           amount: request.amount,
           netAmount,
           fee,
-          currency: request.currency || 'SOL',
+          currency: request.currency || 'USDC',
           status: 'PENDING',
           requestedBy: request.requestedBy,
           multisigPda: fromUser.multisigPda!,
@@ -149,7 +149,7 @@ export class MultisigTransferService {
       console.log(`📝 Created multisig transfer proposal: ${proposal.id}`);
       console.log(`   From: ${request.fromWallet}`);
       console.log(`   To: ${request.toWallet}`);
-      console.log(`   Amount: ${request.amount} ${request.currency || 'SOL'}`);
+      console.log(`   Amount: ${request.amount} ${request.currency || 'USDC'}`);
       console.log(`   Multisig: ${fromUser.multisigPda}`);
 
       // Update admin activity for the requester

@@ -271,7 +271,7 @@ router.post('/:multisigPda/transactions', [
     }
 
     const { multisigPda } = req.params;
-    const { fromWallet, toWallet, amount, currency = 'SOL', memo } = req.body;
+    const { fromWallet, toWallet, amount, currency = 'USDC', memo } = req.body;
 
     // Get multisig from database
     const multisigData = await prisma.multisig.findUnique({

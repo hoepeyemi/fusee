@@ -30,7 +30,7 @@ export class ExternalTransferService {
     fromWallet: string,
     toExternalWallet: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string
   ): Promise<{
     proposalId: number;
@@ -63,8 +63,8 @@ export class ExternalTransferService {
         throw new Error('Amount cannot exceed 1,000,000 SOL');
       }
 
-      if (!currency || !['SOL', 'USDC', 'USDT'].includes(currency)) {
-        throw new Error('Currency must be SOL, USDC, or USDT');
+      if (!currency || currency !== 'USDC') {
+        throw new Error('Currency must be USDC for external transfers');
       }
 
       // Verify user exists
@@ -163,7 +163,7 @@ export class ExternalTransferService {
     fromWallet: string,
     toExternalWallet: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string,
     connection?: Connection
   ): Promise<{
@@ -259,7 +259,7 @@ export class ExternalTransferService {
     fromWallet: string,
     toExternalWallet: string,
     amount: number,
-    currency: string = 'SOL',
+    currency: string = 'USDC',
     notes?: string
   ): Promise<{
     transferId: number;

@@ -73,7 +73,16 @@ const router = Router();
  */
 router.post('/', validateTransfer, async (req: Request, res: Response) => {
   try {
-    const { senderId, receiverFirstName, amount, currency = 'SOL', notes } = req.body;
+    const { senderId, receiverFirstName, amount, currency = 'USDC', notes } = req.body;
+
+    // Validate currency - only USDC allowed
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC transfers are allowed'
+      });
+    }
 
     // Process first name transfer (internal balance transfer)
     const result = await FirstNameTransferService.processFirstNameTransfer({
@@ -200,7 +209,7 @@ router.get('/balance/:userId', async (req: Request, res: Response) => {
     res.json({
       userId: userIdNum,
       balance: balance,
-      currency: 'SOL'
+      currency: 'USDC'
     });
   } catch (error) {
     console.error('Error getting user balance:', error);

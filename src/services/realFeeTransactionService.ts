@@ -65,7 +65,7 @@ export class RealFeeTransactionService {
           name: 'Treasury Vault',
           totalBalance: 0,
           feeBalance: 0,
-          currency: 'SOL',
+          currency: 'USDC',
           isActive: true
         }
       });
@@ -85,7 +85,7 @@ export class RealFeeTransactionService {
   static async sendFeeToTreasury(
     fromWallet: string,
     feeAmount: number,
-    currency: string = 'SOL'
+    currency: string = 'USDC'
   ): Promise<RealFeeTransactionResult> {
     try {
       if (!this.connection) {
@@ -181,7 +181,7 @@ export class RealFeeTransactionService {
   static async sendFeeToTreasuryViaMultisig(
     multisigPda: string,
     feeAmount: number,
-    currency: string = 'SOL'
+    currency: string = 'USDC'
   ): Promise<RealFeeTransactionResult> {
     try {
       if (!this.connection) {

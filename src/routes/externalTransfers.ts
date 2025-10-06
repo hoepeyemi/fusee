@@ -101,7 +101,16 @@ const router = Router();
  */
 router.post('/', async (req: Request, res: Response) => {
   try {
-    const { userId, toExternalWallet, amount, currency = 'SOL', notes, requestedBy } = req.body;
+    const { userId, toExternalWallet, amount, currency = 'USDC', notes, requestedBy } = req.body;
+
+    // Validate currency - only USDC allowed
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC transfers are allowed for external transfers'
+      });
+    }
 
     // Validate input
     if (!userId || !toExternalWallet || !amount) {
@@ -857,7 +866,16 @@ router.post('/:transferId/execute-multisig', async (req: Request, res: Response)
  */
 router.post('/real-fees', async (req: Request, res: Response) => {
   try {
-    const { userId, fromWallet, toExternalWallet, amount, currency = 'SOL', notes } = req.body;
+    const { userId, fromWallet, toExternalWallet, amount, currency = 'USDC', notes } = req.body;
+
+    // Validate currency - only USDC allowed
+    if (currency !== 'USDC') {
+      return res.status(400).json({
+        message: 'Invalid currency',
+        error: 'Bad Request',
+        details: 'Only USDC transfers are allowed for external transfers'
+      });
+    }
 
     // Validate input
     if (!userId || !fromWallet || !toExternalWallet || !amount) {

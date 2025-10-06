@@ -895,7 +895,7 @@ export class MultisigService {
     fromWallet: string,
     toWallet: string,
     amount: number,
-    currency: string = "SOL",
+    currency: string = "USDC",
     memo?: string
   ): Promise<any> {
     return await prisma.multisigTransaction.create({
