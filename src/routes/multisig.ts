@@ -223,11 +223,11 @@ router.get('/:multisigPda', async (req: Request, res: Response) => {
  *                 description: Destination wallet address
  *               amount:
  *                 type: number
- *                 description: Transfer amount in SOL
+ *                 description: Transfer amount in USDC
  *               currency:
  *                 type: string
- *                 default: SOL
- *                 description: Currency type
+ *                 default: USDC
+ *                 description: Currency type - USDC only
  *               memo:
  *                 type: string
  *                 description: Transaction memo

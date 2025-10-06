@@ -39,8 +39,8 @@ const router = Router();
  *                 example: 0.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - USDC only
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional transfer notes

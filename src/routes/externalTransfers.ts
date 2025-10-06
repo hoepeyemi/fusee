@@ -41,8 +41,8 @@ const router = Router();
  *                 example: 2.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - USDC only
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional transfer notes
@@ -823,8 +823,8 @@ router.post('/:transferId/execute-multisig', async (req: Request, res: Response)
  *                 example: 1.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - USDC only
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional transfer notes

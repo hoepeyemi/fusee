@@ -124,8 +124,8 @@ router.get('/balance/:userId', async (req: Request, res: Response) => {
  *                 example: 1.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - USDC only
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional deposit notes
@@ -287,8 +287,8 @@ router.post('/deposit', validateDeposit, handleValidationErrors, async (req: Req
  *                 example: 0.5
  *               currency:
  *                 type: string
- *                 description: Currency type - default SOL
- *                 example: "SOL"
+ *                 description: Currency type - USDC only
+ *                 example: "USDC"
  *               notes:
  *                 type: string
  *                 description: Optional withdrawal notes
@@ -538,7 +538,7 @@ router.get('/wallet/address', async (req: Request, res: Response) => {
  *         schema:
  *           type: string
  *         description: Currency to filter by (optional)
- *         example: "SOL"
+ *         example: "USDC"
  *     responses:
  *       200:
  *         description: Fee statistics retrieved successfully
@@ -595,7 +595,7 @@ router.get('/fees/statistics', async (req: Request, res: Response) => {
  *         schema:
  *           type: string
  *         description: Currency to check balance for
- *         example: "SOL"
+ *         example: "USDC"
  *     responses:
  *       200:
  *         description: Fee balance retrieved successfully

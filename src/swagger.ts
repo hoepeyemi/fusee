@@ -94,7 +94,7 @@ const options = {
                 currency: {
                   type: 'string',
                   description: 'Currency type',
-                  example: 'SOL',
+                  example: 'USDC',
                 },
                 status: {
                   type: 'string',
