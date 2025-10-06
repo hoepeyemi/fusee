@@ -14,8 +14,96 @@ const router = Router();
 router.use(verifyCSRFToken);
 
 /**
- * POST /api/multisig-transfers/propose
- * Create a new transfer proposal
+ * @swagger
+ * /api/multisig-transfers/propose:
+ *   post:
+ *     summary: Create a new multisig transfer proposal
+ *     tags: [Multisig Transfers]
+ *     security:
+ *       - csrf: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - fromWallet
+ *               - toWallet
+ *               - amount
+ *               - requestedBy
+ *             properties:
+ *               fromWallet:
+ *                 type: string
+ *                 description: Source wallet address (must be a user wallet)
+ *                 example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+ *               toWallet:
+ *                 type: string
+ *                 description: Destination wallet address
+ *                 example: "FeeWallet1234567890123456789012345678901234567890"
+ *               amount:
+ *                 type: number
+ *                 format: decimal
+ *                 description: Amount to transfer
+ *                 example: 1.5
+ *               currency:
+ *                 type: string
+ *                 description: Currency type - USDC only
+ *                 example: "USDC"
+ *                 default: "USDC"
+ *               notes:
+ *                 type: string
+ *                 description: Optional transfer notes
+ *                 example: "Payment for services"
+ *               requestedBy:
+ *                 type: string
+ *                 description: Public key or identifier of the requester
+ *                 example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+ *     responses:
+ *       201:
+ *         description: Transfer proposal created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Transfer proposal created successfully"
+ *                 data:
+ *                   $ref: '#/components/schemas/MultisigTransferProposal'
+ *       400:
+ *         description: Bad request - validation errors
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: "Missing required fields: fromWallet, toWallet, amount, requestedBy"
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: false
+ *                 error:
+ *                   type: string
+ *                   example: "Failed to create transfer proposal"
+ *                 details:
+ *                   type: string
+ *                   example: "Error message details"
  */
 router.post('/propose', async (req: Request, res: Response) => {
   try {
@@ -76,8 +164,43 @@ router.post('/propose', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/multisig-transfers/proposals
- * Get all transfer proposals
+ * @swagger
+ * /api/multisig-transfers/proposals:
+ *   get:
+ *     summary: Get all transfer proposals
+ *     tags: [Multisig Transfers]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, PENDING_APPROVAL, APPROVED, EXECUTED, REJECTED, CANCELLED, FAILED]
+ *         description: Filter proposals by status
+ *     responses:
+ *       200:
+ *         description: Transfer proposals retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     proposals:
+ *                       type: array
+ *                       items:
+ *                         $ref: '#/components/schemas/MultisigTransferProposal'
+ *                     count:
+ *                       type: integer
+ *                       example: 5
+ *       500:
+ *         description: Internal server error
  */
 router.get('/proposals', async (req: Request, res: Response) => {
   try {
@@ -324,8 +447,56 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/multisig-transfers/check-requirement
- * Check if a transfer requires multisig approval
+ * @swagger
+ * /api/multisig-transfers/check-requirement:
+ *   get:
+ *     summary: Check if a transfer requires multisig approval
+ *     tags: [Multisig Transfers]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: query
+ *         name: fromWallet
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Source wallet address
+ *         example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
+ *       - in: query
+ *         name: toWallet
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Destination wallet address
+ *         example: "FeeWallet1234567890123456789012345678901234567890"
+ *     responses:
+ *       200:
+ *         description: Transfer requirement checked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     requiresApproval:
+ *                       type: boolean
+ *                       description: Whether the transfer requires multisig approval
+ *                       example: true
+ *                     fromWallet:
+ *                       type: string
+ *                       description: Source wallet address
+ *                     toWallet:
+ *                       type: string
+ *                       description: Destination wallet address
+ *       400:
+ *         description: Bad request - missing required parameters
+ *       500:
+ *         description: Internal server error
  */
 router.get('/check-requirement', async (req: Request, res: Response) => {
   try {

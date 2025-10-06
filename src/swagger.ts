@@ -848,6 +848,82 @@ const options = {
             },
           },
         },
+        MultisigTransferProposal: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'integer',
+              description: 'Proposal ID',
+            },
+            fromWallet: {
+              type: 'string',
+              description: 'Source wallet address',
+            },
+            toWallet: {
+              type: 'string',
+              description: 'Destination wallet address',
+            },
+            amount: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Transfer amount',
+            },
+            netAmount: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Amount after fee deduction',
+            },
+            fee: {
+              type: 'number',
+              format: 'decimal',
+              description: 'Transfer fee (0.001%)',
+            },
+            currency: {
+              type: 'string',
+              description: 'Currency type - USDC only',
+              example: 'USDC',
+            },
+            status: {
+              type: 'string',
+              enum: ['PENDING', 'PENDING_APPROVAL', 'APPROVED', 'EXECUTED', 'REJECTED', 'CANCELLED', 'FAILED'],
+              description: 'Proposal status',
+            },
+            requestedBy: {
+              type: 'string',
+              description: 'Public key or identifier of the requester',
+            },
+            multisigPda: {
+              type: 'string',
+              description: 'Multisig PDA address',
+            },
+            proposalId: {
+              type: 'string',
+              description: 'External proposal ID (if any)',
+            },
+            transactionHash: {
+              type: 'string',
+              description: 'Blockchain transaction hash',
+            },
+            transactionData: {
+              type: 'string',
+              description: 'JSON string containing transaction data',
+            },
+            notes: {
+              type: 'string',
+              description: 'Transfer notes',
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Proposal creation date',
+            },
+            updatedAt: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Proposal last update date',
+            },
+          },
+        },
         Error: {
           type: 'object',
           properties: {
