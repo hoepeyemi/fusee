@@ -848,29 +848,84 @@ async function deleteUserData(userId: number, user: any) {
     // Transaction 4: Delete deposits, withdrawals, and yield investments (foreign key constraints)
     console.log('Step 4: Deleting deposits, withdrawals, and yield investments (foreign key constraints)...');
     await prisma.$transaction(async (tx) => {
-      await tx.deposit.deleteMany({
-        where: { userId: userId }
-      });
-      await tx.withdrawal.deleteMany({
-        where: { userId: userId }
-      });
-      await tx.yieldInvestment.deleteMany({
-        where: { userId: userId }
-      });
+      // Delete deposits
+      try {
+        await tx.deposit.deleteMany({
+          where: { userId: userId }
+        });
+        console.log('✅ Deposits deleted successfully');
+      } catch (error) {
+        if (error.code === 'P2021') {
+          console.log('⚠️ Deposits table does not exist, skipping...');
+        } else {
+          console.error('❌ Error deleting deposits:', error.message);
+          throw error;
+        }
+      }
+      
+      // Delete withdrawals
+      try {
+        await tx.withdrawal.deleteMany({
+          where: { userId: userId }
+        });
+        console.log('✅ Withdrawals deleted successfully');
+      } catch (error) {
+        if (error.code === 'P2021') {
+          console.log('⚠️ Withdrawals table does not exist, skipping...');
+        } else {
+          console.error('❌ Error deleting withdrawals:', error.message);
+          throw error;
+        }
+      }
+      
+      // Try to delete yield investments (table might not exist yet)
+      try {
+        await tx.yieldInvestment.deleteMany({
+          where: { userId: userId }
+        });
+        console.log('✅ Yield investments deleted successfully');
+      } catch (error) {
+        if (error.code === 'P2021') {
+          console.log('⚠️ Yield investments table does not exist, skipping...');
+        } else {
+          console.error('❌ Error deleting yield investments:', error.message);
+          throw error;
+        }
+      }
     }, { timeout: 10000 });
 
     // Transaction 5: Delete multisig members and wallet mappings
     console.log('Step 5: Deleting multisig members and wallet mappings...');
     await prisma.$transaction(async (tx) => {
       // Delete multisig members (userId is optional, so we can delete them)
-      await tx.multisigMember.deleteMany({
-        where: { userId: userId }
-      });
+      try {
+        await tx.multisigMember.deleteMany({
+          where: { userId: userId }
+        });
+        console.log('✅ Multisig members deleted successfully');
+      } catch (error) {
+        if (error.code === 'P2021') {
+          console.log('⚠️ Multisig members table does not exist, skipping...');
+        } else {
+          console.error('❌ Error deleting multisig members:', error.message);
+          throw error;
+        }
+      }
       
       // Delete wallet mapping
-      await tx.wallet.deleteMany({
-        where: { firstName: user.firstName },
-      });
+      try {
+        await tx.wallet.deleteMany({
+          where: { firstName: user.firstName },
+        });
+        console.log('✅ Wallet mappings deleted successfully');
+      } catch (error) {
+        if (error.code === 'P2021') {
+          console.log('⚠️ Wallet table does not exist, skipping...');
+        } else {
+          console.error('❌ Error deleting wallet mappings:', error.message);
+          throw error;
+        }
+      }
     }, { timeout: 10000 });
 
     // Transaction 6: Delete user record (all foreign key constraints should be resolved)
