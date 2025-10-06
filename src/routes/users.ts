@@ -730,11 +730,11 @@ async function getDeletedDataCounts(userId: number, user: any) {
 }
 
 /**
- * Anonymize user data while retaining all transaction history
- * This method preserves all data for audit purposes while removing personal information
+ * Delete user and all related data
+ * This method removes all user data and related records to resolve foreign key constraints
  */
-async function anonymizeUserData(userId: number, user: any) {
-  console.log(`🔄 Starting user anonymization for user ${userId}...`);
+async function deleteUserData(userId: number, user: any) {
+  console.log(`🔄 Starting user deletion for user ${userId}...`);
   
   try {
     // Generate anonymized identifiers
@@ -774,63 +774,57 @@ async function anonymizeUserData(userId: number, user: any) {
       });
     }, { timeout: 10000 });
 
-    // Transaction 3: Anonymize transfers (keep data, remove personal info)
-    console.log('Step 3: Anonymizing transfers...');
+    // Transaction 3: Delete transfers (they reference the user via foreign keys)
+    console.log('Step 3: Deleting transfers (foreign key constraints)...');
     await prisma.$transaction(async (tx) => {
-      await tx.transfer.updateMany({
+      // Delete transfers where user is sender or receiver
+      await tx.transfer.deleteMany({
         where: { 
           OR: [
             { senderId: userId },
             { receiverId: userId }
           ]
-        },
-        data: {
-          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
         }
       });
     }, { timeout: 10000 });
 
-    // Transaction 4: Anonymize deposits and withdrawals (keep data, remove personal info)
-    console.log('Step 4: Anonymizing deposits and withdrawals...');
+    // Transaction 4: Delete deposits, withdrawals, and yield investments (foreign key constraints)
+    console.log('Step 4: Deleting deposits, withdrawals, and yield investments (foreign key constraints)...');
     await prisma.$transaction(async (tx) => {
-      await tx.deposit.updateMany({
-        where: { userId: userId },
-        data: {
-          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
-        }
+      await tx.deposit.deleteMany({
+        where: { userId: userId }
       });
-      await tx.withdrawal.updateMany({
-        where: { userId: userId },
-        data: {
-          notes: `[ANONYMIZED] ${user.firstName || 'User'} - ${new Date().toISOString()}`
-        }
+      await tx.withdrawal.deleteMany({
+        where: { userId: userId }
+      });
+      await tx.yieldInvestment.deleteMany({
+        where: { userId: userId }
       });
     }, { timeout: 10000 });
 
-    // Transaction 5: Anonymize multisig members and delete user
-    console.log('Step 5: Anonymizing multisig members and deleting user...');
+    // Transaction 5: Delete multisig members and wallet mappings
+    console.log('Step 5: Deleting multisig members and wallet mappings...');
     await prisma.$transaction(async (tx) => {
-      // Anonymize multisig members
-      await tx.multisigMember.updateMany({
-        where: { userId: userId },
-        data: {
-          publicKey: `ANONYMIZED_${userId}_${Date.now()}`,
-          permissions: 'ANONYMIZED'
-        }
+      // Delete multisig members (userId is optional, so we can delete them)
+      await tx.multisigMember.deleteMany({
+        where: { userId: userId }
       });
       
       // Delete wallet mapping
       await tx.wallet.deleteMany({
         where: { firstName: user.firstName },
       });
-      
-      // Delete user record
+    }, { timeout: 10000 });
+
+    // Transaction 6: Delete user record (all foreign key constraints should be resolved)
+    console.log('Step 6: Deleting user record...');
+    await prisma.$transaction(async (tx) => {
       await tx.user.delete({
         where: { id: userId },
       });
     }, { timeout: 10000 });
 
-    console.log(`✅ User ${userId} anonymized successfully - all data retained for audit`);
+    console.log(`✅ User ${userId} deleted successfully - all related data removed`);
     
   } catch (error) {
     console.error(`❌ Error in user anonymization for user ${userId}:`, error);
@@ -1300,10 +1294,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    // Use anonymization approach to retain all data for audit purposes
-    // This preserves transaction history while removing personal information
-    console.log(`🗑️ Starting user anonymization for user ${userId}...`);
-    await anonymizeUserData(userId, user);
+    // Delete user and all related data to resolve foreign key constraints
+    console.log(`🗑️ Starting user deletion for user ${userId}...`);
+    await deleteUserData(userId, user);
     
     // Get counts for response
     const counts = await getDeletedDataCounts(userId, user);
