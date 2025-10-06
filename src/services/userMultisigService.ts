@@ -13,7 +13,85 @@ export interface UserMultisigConfig {
 }
 
 export class UserMultisigService {
+  /**
+   * Handle duplicate public key by updating existing member or creating new one
+   */
+  private static async handleDuplicatePublicKey(
+    publicKey: string, 
+    userId: number, 
+    permissions: string[]
+  ): Promise<void> {
+    const existingMember = await prisma.multisigMember.findUnique({
+      where: { publicKey }
+    });
+
+    if (existingMember) {
+      // Update existing member to be associated with this user
+      await prisma.multisigMember.update({
+        where: { publicKey },
+        data: {
+          userId: userId,
+          permissions: JSON.stringify(permissions),
+          isActive: true
+        }
+      });
+      console.log(`✅ Updated existing member ${publicKey} for user ${userId}`);
+    } else {
+      // Create new member
+      await prisma.multisigMember.create({
+        data: {
+          userId: userId,
+          publicKey: publicKey,
+          permissions: JSON.stringify(permissions),
+          isActive: true
+        }
+      });
+      console.log(`✅ Created new member ${publicKey} for user ${userId}`);
+    }
+  }
+
+  /**
+   * Clean up orphaned multisig members (members without valid users)
+   */
+  public static async cleanupOrphanedMembers(): Promise<void> {
+    try {
+      const orphanedMembers = await prisma.multisigMember.findMany({
+        where: {
+          userId: {
+            not: null
+          }
+        },
+        include: {
+          user: true
+        }
+      });
+
+      const toDelete = orphanedMembers.filter(member => !member.user);
+      
+      if (toDelete.length > 0) {
+        console.log(`🧹 Found ${toDelete.length} orphaned multisig members, cleaning up...`);
+        
+        await prisma.multisigMember.deleteMany({
+          where: {
+            id: {
+              in: toDelete.map(m => m.id)
+            }
+          }
+        });
+        
+        console.log(`✅ Cleaned up ${toDelete.length} orphaned multisig members`);
+      } else {
+        console.log(`✅ No orphaned multisig members found`);
+      }
+    } catch (error) {
+      console.error(`❌ Error cleaning up orphaned members:`, error);
+    }
+  }
+
   public static async createUserMultisig(config: UserMultisigConfig) {
+    // Clean up any orphaned members first
+    await this.cleanupOrphanedMembers();
+
     const user = await prisma.user.findUnique({
       where: { id: config.userId }
     });
@@ -52,29 +130,27 @@ export class UserMultisigService {
     console.log(`   Initial Member (Creator): ${multisigResult.memberPublicKeys[0]}`);
 
     // Store the creator as the initial member
-    await prisma.multisigMember.create({
-      data: {
-        userId: config.userId,
-        publicKey: multisigResult.memberPublicKeys[0], // Creator's public key
-        permissions: JSON.stringify(['propose', 'vote', 'execute']), // Full permissions for creator
-        isActive: true
-      }
-    });
+    const creatorPublicKey = multisigResult.memberPublicKeys[0];
+    await this.handleDuplicatePublicKey(
+      creatorPublicKey,
+      config.userId,
+      ['propose', 'vote', 'execute']
+    );
 
     // Store additional members from the config (they'll be added later via separate transactions)
     if (config.members && config.members.length > 0) {
-      await Promise.all(
-        config.members.map(member =>
-          prisma.multisigMember.create({
-            data: {
-              userId: config.userId,
-              publicKey: member.publicKey, // Use the provided public key
-              permissions: JSON.stringify(member.permissions),
-              isActive: true
-            }
-          })
-        )
-      );
+      for (const member of config.members) {
+        try {
+          await this.handleDuplicatePublicKey(
+            member.publicKey,
+            config.userId,
+            member.permissions
+          );
+        } catch (error) {
+          console.log(`⚠️ Failed to handle member ${member.publicKey}:`, error.message);
+          // Continue with other members even if one fails
+        }
+      }
     }
 
     return {
