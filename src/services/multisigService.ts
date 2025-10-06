@@ -61,19 +61,93 @@ export class MultisigService {
     const { Keypair } = await import('@solana/web3.js');
     const bs58 = await import('bs58');
     
-    if (!this.createKey) {
-      // Generate a keypair for the createKey, not just a public key
-      const createKeypair = Keypair.generate();
-      this.createKey = createKeypair.publicKey;
-      // Store the keypair for signing
-      this.createKeypair = createKeypair;
-    }
+    // Generate a new createKey for each multisig to ensure unique addresses
+    const createKeypair = Keypair.generate();
+    this.createKey = createKeypair.publicKey;
+    this.createKeypair = createKeypair;
 
-    const [multisigPda] = multisig.getMultisigPda({
+    let [multisigPda] = multisig.getMultisigPda({
       createKey: this.createKey,
     });
 
-    this.multisigPda = multisigPda;
+    // Check if multisig account already exists on the blockchain and retry if needed
+    let attempts = 0;
+    const maxAttempts = 5;
+    let foundUniqueAddress = false;
+    
+    while (!foundUniqueAddress && attempts < maxAttempts) {
+      try {
+        // Check if multisig already exists in database
+        const existingMultisig = await prisma.multisig.findUnique({
+          where: { multisigPda: multisigPda.toString() }
+        });
+        
+        if (existingMultisig) {
+          attempts++;
+          console.log(`⚠️ Multisig account ${multisigPda.toString()} already exists in database (attempt ${attempts}/${maxAttempts})`);
+          
+          if (attempts < maxAttempts) {
+            // Generate a new createKey and try again
+            const newCreateKeypair = Keypair.generate();
+            this.createKey = newCreateKeypair.publicKey;
+            this.createKeypair = newCreateKeypair;
+            
+            [multisigPda] = multisig.getMultisigPda({
+              createKey: this.createKey,
+            });
+            
+            console.log(`🔄 Trying new address: ${multisigPda.toString()}`);
+            continue;
+          } else {
+            throw new Error(`Failed to find unique multisig address after ${maxAttempts} attempts. Please try again.`);
+          }
+        }
+        
+        // Check if multisig account already exists on the blockchain
+        const existingAccount = await this.connection.getAccountInfo(multisigPda);
+        if (existingAccount) {
+          attempts++;
+          console.log(`⚠️ Multisig account ${multisigPda.toString()} already exists on blockchain (attempt ${attempts}/${maxAttempts})`);
+          
+          if (attempts < maxAttempts) {
+            // Generate a new createKey and try again
+            const newCreateKeypair = Keypair.generate();
+            this.createKey = newCreateKeypair.publicKey;
+            this.createKeypair = newCreateKeypair;
+            
+            [multisigPda] = multisig.getMultisigPda({
+              createKey: this.createKey,
+            });
+            
+            console.log(`🔄 Trying new address: ${multisigPda.toString()}`);
+          } else {
+            throw new Error(`Failed to find unique multisig address after ${maxAttempts} attempts. Please try again.`);
+          }
+        } else {
+          foundUniqueAddress = true;
+          this.multisigPda = multisigPda;
+          console.log(`✅ Using unique multisig address: ${this.multisigPda.toString()}`);
+        }
+      } catch (error) {
+        if (attempts >= maxAttempts) {
+          console.error('Error checking existing multisig account after max attempts:', error);
+          throw new Error(`Failed to find unique multisig address after ${maxAttempts} attempts: ${error.message}`);
+        }
+        attempts++;
+        console.log(`⚠️ Error checking address (attempt ${attempts}/${maxAttempts}):`, error.message);
+        
+        // Generate a new createKey and try again
+        const newCreateKeypair = Keypair.generate();
+        this.createKey = newCreateKeypair.publicKey;
+        this.createKeypair = newCreateKeypair;
+        
+        [multisigPda] = multisig.getMultisigPda({
+          createKey: this.createKey,
+        });
+        
+        console.log(`🔄 Trying new address after error: ${multisigPda.toString()}`);
+      }
+    }
 
     // Program config will be fetched in the instruction creation below
 
