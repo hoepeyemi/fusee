@@ -109,6 +109,19 @@ export class MultisigService {
     );
     
     console.log(`✅ SOL transfer from ${fromName} successful: ${transferSignature}`);
+    
+    // Verify the transaction was actually successful
+    try {
+      const transactionStatus = await this.connection.getSignatureStatus(transferSignature, { searchTransactionHistory: true });
+      if (transactionStatus.value?.err) {
+        throw new Error(`Transfer transaction failed: ${JSON.stringify(transactionStatus.value.err)}`);
+      }
+      console.log(`✅ Transfer transaction confirmed on blockchain`);
+    } catch (verifyError) {
+      console.log(`⚠️ Could not verify transaction status: ${verifyError.message}`);
+      // Don't throw here, the transaction might still be valid
+    }
+    
     return transferSignature;
   }
 
@@ -585,21 +598,82 @@ export class MultisigService {
           if (bestFunder) {
             try {
               const transferAmount = 0.1 * LAMPORTS_PER_SOL;
-              await this.transferSOLFromMember(
+              const transferSignature = await this.transferSOLFromMember(
                 bestFunder.keypair,
                 bestFunder.name,
                 this.createKeypair!.publicKey,
                 transferAmount
               );
               
-              // Wait for balance to update
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Wait for balance to update with multiple checks
+              console.log('⏳ Waiting for balance to update after transfer...');
+              await new Promise(resolve => setTimeout(resolve, 5000)); // Increased wait time
               
-              const finalCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
+              // Check balance multiple times with retries
+              let finalCreateKeyBalance = 0;
+              let balanceCheckAttempts = 0;
+              const maxBalanceChecks = 5;
+              
+              while (balanceCheckAttempts < maxBalanceChecks) {
+                try {
+                  // Try different commitment levels for balance check
+                  const commitmentLevels = ['processed', 'confirmed', 'finalized'];
+                  const commitment = commitmentLevels[balanceCheckAttempts % commitmentLevels.length];
+                  
+                  finalCreateKeyBalance = await this.connection.getBalance(
+                    this.createKeypair!.publicKey,
+                    commitment as any
+                  );
+                  console.log(`🔍 Balance check ${balanceCheckAttempts + 1}/${maxBalanceChecks} (${commitment}): ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${finalCreateKeyBalance} lamports)`);
+                  
+                  if (finalCreateKeyBalance >= 0.01 * LAMPORTS_PER_SOL) {
+                    console.log(`✅ CreateKey balance confirmed: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
+                    break;
+                  } else {
+                    balanceCheckAttempts++;
+                    if (balanceCheckAttempts < maxBalanceChecks) {
+                      console.log(`⚠️ Balance still low, waiting 3 seconds before retry...`);
+                      await new Promise(resolve => setTimeout(resolve, 3000));
+                    }
+                  }
+                } catch (balanceError) {
+                  console.log(`❌ Error checking balance (attempt ${balanceCheckAttempts + 1}):`, balanceError.message);
+                  balanceCheckAttempts++;
+                  if (balanceCheckAttempts < maxBalanceChecks) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                  }
+                }
+              }
+              
               console.log(`✅ CreateKey final balance: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${finalCreateKeyBalance} lamports)`);
               
               if (finalCreateKeyBalance < 0.01 * LAMPORTS_PER_SOL) {
-                throw new Error(`CreateKey still has insufficient SOL after member funding: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
+                // Additional debugging information
+                console.log('🔍 Debugging information:');
+                console.log(`   Transfer amount sent: ${transferAmount / LAMPORTS_PER_SOL} SOL`);
+                console.log(`   CreateKey address: ${this.createKeypair!.publicKey.toString()}`);
+                console.log(`   Transfer signature: ${transferSignature}`);
+                console.log(`   Balance check attempts: ${balanceCheckAttempts}`);
+                console.log(`   Funder: ${bestFunder.name} (${bestFunder.keypair.publicKey.toString()})`);
+                console.log(`   Transaction explorer: https://explorer.solana.com/tx/${transferSignature}?cluster=devnet`);
+                
+                // Try one more time with a longer wait
+                console.log('🔄 Trying one final balance check after extended wait...');
+                await new Promise(resolve => setTimeout(resolve, 10000)); // Wait 10 more seconds
+                
+                try {
+                  const finalBalanceCheck = await this.connection.getBalance(this.createKeypair!.publicKey, 'finalized');
+                  console.log(`🔍 Final balance check: ${finalBalanceCheck / LAMPORTS_PER_SOL} SOL (${finalBalanceCheck} lamports)`);
+                  
+                  if (finalBalanceCheck >= 0.01 * LAMPORTS_PER_SOL) {
+                    console.log(`✅ Balance finally confirmed after extended wait!`);
+                    finalCreateKeyBalance = finalBalanceCheck;
+                  } else {
+                    throw new Error(`CreateKey still has insufficient SOL after member funding: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL. Transfer was successful but balance not reflected. This might be a network delay issue. Check transaction: https://explorer.solana.com/tx/${transferSignature}?cluster=devnet`);
+                  }
+                } catch (finalCheckError) {
+                  throw new Error(`CreateKey still has insufficient SOL after member funding: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL. Transfer was successful but balance not reflected. This might be a network delay issue. Check transaction: https://explorer.solana.com/tx/${transferSignature}?cluster=devnet`);
+                }
               }
             } catch (fundingError) {
               console.log('❌ Member funding failed:', fundingError.message);
