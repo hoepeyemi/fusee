@@ -656,7 +656,7 @@ export class MultisigService {
     const currentTransactionIndex = Number(multisigInfo.transactionIndex);
     const newTransactionIndex = BigInt(currentTransactionIndex + 1);
 
-    // Derive vault PDA
+    // Derive vault PDAs
     const [vaultPda] = multisig.getVaultPda({
       multisigPda: this.multisigPda,
       index: 0,
