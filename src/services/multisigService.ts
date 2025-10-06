@@ -49,6 +49,70 @@ export class MultisigService {
   }
 
   /**
+   * Helper method to check member balances and find the best funder
+   */
+  private async findBestFunder(members: Array<{ keypair: Keypair; name: string }>): Promise<{ keypair: Keypair; name: string; balance: number } | null> {
+    const { LAMPORTS_PER_SOL } = await import('@solana/web3.js');
+    const transferAmount = 0.1 * LAMPORTS_PER_SOL;
+    const requiredBalance = transferAmount + 0.01 * LAMPORTS_PER_SOL; // Need extra for fees
+    
+    console.log('🔍 Checking member balances for funding...');
+    
+    for (const member of members) {
+      try {
+        const balance = await this.connection.getBalance(member.keypair.publicKey);
+        console.log(`   ${member.name}: ${balance / LAMPORTS_PER_SOL} SOL (${balance} lamports)`);
+        
+        if (balance >= requiredBalance) {
+          console.log(`✅ ${member.name} has sufficient balance for funding`);
+          return { ...member, balance };
+        } else {
+          console.log(`⚠️ ${member.name} has insufficient balance for funding (needs ${requiredBalance / LAMPORTS_PER_SOL} SOL)`);
+        }
+      } catch (error) {
+        console.log(`❌ Error checking ${member.name} balance:`, error.message);
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Helper method to transfer SOL from a member to createKey
+   */
+  private async transferSOLFromMember(
+    fromKeypair: Keypair, 
+    fromName: string, 
+    toPublicKey: PublicKey, 
+    amount: number
+  ): Promise<string> {
+    const { SystemProgram, Transaction, sendAndConfirmTransaction } = await import('@solana/web3.js');
+    
+    console.log(`💸 Transferring ${amount / 1e9} SOL from ${fromName} to CreateKey...`);
+    
+    const transferInstruction = SystemProgram.transfer({
+      fromPubkey: fromKeypair.publicKey,
+      toPubkey: toPublicKey,
+      lamports: amount,
+    });
+    
+    const transferTransaction = new Transaction().add(transferInstruction);
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    transferTransaction.recentBlockhash = blockhash;
+    transferTransaction.feePayer = fromKeypair.publicKey;
+    
+    const transferSignature = await sendAndConfirmTransaction(
+      this.connection,
+      transferTransaction,
+      [fromKeypair],
+      { commitment: 'confirmed' }
+    );
+    
+    console.log(`✅ SOL transfer from ${fromName} successful: ${transferSignature}`);
+    return transferSignature;
+  }
+
+  /**
    * Create a new multisig account
    */
   async createMultisig(creator: Keypair): Promise<{
@@ -502,46 +566,48 @@ export class MultisigService {
         }
         
         if (!airdropSuccess) {
-          console.log('⚠️ All airdrop attempts failed. Trying alternative approach...');
+          console.log('⚠️ All airdrop attempts failed. Trying alternative approach with member funding...');
           
-          // Alternative: Transfer SOL from member1 to createKey
-          try {
-            console.log('💸 Transferring SOL from Member 1 to CreateKey...');
-            const { SystemProgram, Transaction, sendAndConfirmTransaction } = await import('@solana/web3.js');
-            
-            const transferAmount = 0.1 * LAMPORTS_PER_SOL; // Transfer 0.1 SOL
-            const transferInstruction = SystemProgram.transfer({
-              fromPubkey: member1Keypair.publicKey,
-              toPubkey: this.createKeypair!.publicKey,
-              lamports: transferAmount,
-            });
-            
-            const transferTransaction = new Transaction().add(transferInstruction);
-            const { blockhash } = await this.connection.getLatestBlockhash();
-            transferTransaction.recentBlockhash = blockhash;
-            transferTransaction.feePayer = member1Keypair.publicKey;
-            
-            const transferSignature = await sendAndConfirmTransaction(
-              this.connection,
-              transferTransaction,
-              [member1Keypair],
-              { commitment: 'confirmed' }
-            );
-            
-            console.log(`✅ SOL transfer successful: ${transferSignature}`);
-            
-            // Wait for balance to update
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            
-            const finalCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
-            console.log(`✅ CreateKey final balance: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${finalCreateKeyBalance} lamports)`);
-            
-            if (finalCreateKeyBalance < 0.01 * LAMPORTS_PER_SOL) {
-              throw new Error(`CreateKey still has insufficient SOL after transfer: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
+          // Prepare members for funding check
+          const members = [
+            { keypair: member1Keypair, name: 'Member 1' },
+            { keypair: member2Keypair, name: 'Member 2' }
+          ];
+          
+          // Add Member 3 if available
+          if (member3Keypair) {
+            members.push({ keypair: member3Keypair, name: 'Member 3' });
+          }
+          
+          // Find the best member to fund the createKey
+          const bestFunder = await this.findBestFunder(members);
+          
+          if (bestFunder) {
+            try {
+              const transferAmount = 0.1 * LAMPORTS_PER_SOL;
+              await this.transferSOLFromMember(
+                bestFunder.keypair,
+                bestFunder.name,
+                this.createKeypair!.publicKey,
+                transferAmount
+              );
+              
+              // Wait for balance to update
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              
+              const finalCreateKeyBalance = await this.connection.getBalance(this.createKeypair!.publicKey);
+              console.log(`✅ CreateKey final balance: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL (${finalCreateKeyBalance} lamports)`);
+              
+              if (finalCreateKeyBalance < 0.01 * LAMPORTS_PER_SOL) {
+                throw new Error(`CreateKey still has insufficient SOL after member funding: ${finalCreateKeyBalance / LAMPORTS_PER_SOL} SOL`);
+              }
+            } catch (fundingError) {
+              console.log('❌ Member funding failed:', fundingError.message);
+              throw new Error(`Failed to fund createKey ${this.createKeypair!.publicKey.toString()}. Airdrop failed and member funding failed: ${fundingError.message}. Please manually fund this address with at least 0.01 SOL.`);
             }
-          } catch (transferError) {
-            console.log('❌ SOL transfer also failed:', transferError.message);
-            throw new Error(`Failed to fund createKey ${this.createKeypair!.publicKey.toString()}. Airdrop failed: ${transferError.message}. Please manually fund this address with at least 0.01 SOL.`);
+          } else {
+            console.log('❌ No members have sufficient balance for funding');
+            throw new Error(`Failed to fund createKey ${this.createKeypair!.publicKey.toString()}. Airdrop failed and no members have sufficient balance for funding. Please manually fund this address with at least 0.01 SOL.`);
           }
         }
       } else {
