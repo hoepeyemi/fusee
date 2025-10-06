@@ -744,9 +744,25 @@ async function deleteUserData(userId: number, user: any) {
     const anonymizedFirstName = `Deleted_${userId}`;
     const anonymizedWallet = `DELETED_WALLET_${userId}`;
     
-    // Transaction 1: Anonymize external transfers (keep data, remove personal info)
-    console.log('Step 1: Anonymizing external transfers...');
+    // Transaction 1: Delete external fees and anonymize external transfers
+    console.log('Step 1: Deleting external fees and anonymizing external transfers...');
     await prisma.$transaction(async (tx) => {
+      // First, get all external transfer IDs for this user
+      const userExternalTransfers = await tx.externalTransfer.findMany({
+        where: { userId: userId },
+        select: { id: true }
+      });
+      
+      const externalTransferIds = userExternalTransfers.map(t => t.id);
+      
+      // Delete external fees that reference these transfers
+      if (externalTransferIds.length > 0) {
+        await tx.externalFee.deleteMany({
+          where: { externalTransferId: { in: externalTransferIds } }
+        });
+      }
+      
+      // Anonymize external transfers (no foreign key constraints)
       await tx.externalTransfer.updateMany({
         where: { userId: userId },
         data: {
@@ -756,9 +772,30 @@ async function deleteUserData(userId: number, user: any) {
       });
     }, { timeout: 10000 });
 
-    // Transaction 2: Anonymize wallet transfers (keep data, remove personal info)
-    console.log('Step 2: Anonymizing wallet transfers...');
+    // Transaction 2: Delete wallet fees and anonymize wallet transfers
+    console.log('Step 2: Deleting wallet fees and anonymizing wallet transfers...');
     await prisma.$transaction(async (tx) => {
+      // First, get all wallet transfer IDs for this user
+      const userWalletTransfers = await tx.walletTransfer.findMany({
+        where: { 
+          OR: [
+            { fromWallet: user.solanaWallet },
+            { toWallet: user.solanaWallet }
+          ]
+        },
+        select: { id: true }
+      });
+      
+      const walletTransferIds = userWalletTransfers.map(t => t.id);
+      
+      // Delete wallet fees that reference these transfers
+      if (walletTransferIds.length > 0) {
+        await tx.walletFee.deleteMany({
+          where: { walletTransferId: { in: walletTransferIds } }
+        });
+      }
+      
+      // Anonymize wallet transfers (no foreign key constraints)
       await tx.walletTransfer.updateMany({
         where: { 
           OR: [
@@ -774,10 +811,30 @@ async function deleteUserData(userId: number, user: any) {
       });
     }, { timeout: 10000 });
 
-    // Transaction 3: Delete transfers (they reference the user via foreign keys)
-    console.log('Step 3: Deleting transfers (foreign key constraints)...');
+    // Transaction 3: Delete fees and transfers (they reference the user via foreign keys)
+    console.log('Step 3: Deleting fees and transfers (foreign key constraints)...');
     await prisma.$transaction(async (tx) => {
-      // Delete transfers where user is sender or receiver
+      // First, get all transfer IDs for this user
+      const userTransfers = await tx.transfer.findMany({
+        where: { 
+          OR: [
+            { senderId: userId },
+            { receiverId: userId }
+          ]
+        },
+        select: { id: true }
+      });
+      
+      const transferIds = userTransfers.map(t => t.id);
+      
+      // Delete fees that reference these transfers
+      if (transferIds.length > 0) {
+        await tx.fee.deleteMany({
+          where: { transferId: { in: transferIds } }
+        });
+      }
+      
+      // Now delete the transfers
       await tx.transfer.deleteMany({
         where: { 
           OR: [
