@@ -301,7 +301,44 @@ export class MultisigProposalService {
   }
 
   /**
-   * Approve a proposal
+   * Check if a member has voting permissions
+   */
+  private hasVotingPermission(member: any): boolean {
+    try {
+      const permissions = JSON.parse(member.permissions || '[]');
+      // Check for Squads SDK permission objects or string permissions
+      return permissions.some((perm: any) => 
+        (typeof perm === 'object' && perm.name === 'Vote') ||
+        (typeof perm === 'string' && perm === 'Vote') ||
+        (typeof perm === 'string' && perm === 'Voter') ||
+        (typeof perm === 'string' && perm === 'Executor')
+      );
+    } catch (error) {
+      console.error('Error parsing member permissions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if a member has execution permissions
+   */
+  private hasExecutionPermission(member: any): boolean {
+    try {
+      const permissions = JSON.parse(member.permissions || '[]');
+      // Check for Squads SDK permission objects or string permissions
+      return permissions.some((perm: any) => 
+        (typeof perm === 'object' && perm.name === 'Execute') ||
+        (typeof perm === 'string' && perm === 'Execute') ||
+        (typeof perm === 'string' && perm === 'Executor')
+      );
+    } catch (error) {
+      console.error('Error parsing member permissions:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Approve a transfer proposal
    */
   async approveProposal(proposalId: number, memberPublicKey: string): Promise<boolean> {
     try {
@@ -317,10 +354,15 @@ export class MultisigProposalService {
         throw new Error('Member not found or inactive');
       }
 
+      // Check if member has voting permissions
+      if (!this.hasVotingPermission(member)) {
+        throw new Error('Member does not have voting permissions');
+      }
+
       // Check if already approved
-      const existingApproval = await prisma.multisigApproval.findFirst({
+      const existingApproval = await prisma.multisigTransferProposalApproval.findFirst({
         where: {
-          multisigTransactionId: proposalId,
+          proposalId: proposalId,
           memberId: member.id
         }
       });
@@ -330,19 +372,18 @@ export class MultisigProposalService {
       }
 
       // Create approval
-      await prisma.multisigApproval.create({
+      await prisma.multisigTransferProposalApproval.create({
         data: {
-          multisigTransactionId: proposalId,
+          proposalId: proposalId,
           memberId: member.id,
           approvalType: 'APPROVE'
         }
       });
 
-      // Check if enough approvals
-      const proposal = await prisma.multisigTransaction.findUnique({
+      // Get the proposal with approvals
+      const proposal = await prisma.multisigTransferProposal.findUnique({
         where: { id: proposalId },
         include: {
-          multisig: true,
           approvals: true
         }
       });
@@ -351,22 +392,23 @@ export class MultisigProposalService {
         throw new Error('Proposal not found');
       }
 
+      // Check if enough approvals (default threshold is 2 for 2-of-3 multisig)
       const approvalCount = proposal.approvals.length;
-      const threshold = proposal.multisig.threshold;
+      const requiredApprovals = 2; // Default threshold for admin multisig
 
-      if (approvalCount >= threshold) {
+      if (approvalCount >= requiredApprovals) {
         // Update proposal status to approved
-        await prisma.multisigTransaction.update({
+        await prisma.multisigTransferProposal.update({
           where: { id: proposalId },
           data: { status: 'APPROVED' }
         });
 
-        console.log(`✅ Proposal ${proposalId} approved by ${approvalCount}/${threshold} members`);
+        console.log(`✅ Proposal ${proposalId} approved by ${approvalCount}/${requiredApprovals} members`);
+        return true; // Ready for execution
       } else {
-        console.log(`📊 Proposal ${proposalId} has ${approvalCount}/${threshold} approvals`);
+        console.log(`📊 Proposal ${proposalId} has ${approvalCount}/${requiredApprovals} approvals`);
+        return false; // Not enough approvals yet
       }
-
-      return true;
 
     } catch (error) {
       console.error('Error approving proposal:', error);

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
 import { validateUser, handleValidationErrors } from '../middleware/security';
+import { syncUserBalanceOnRequest, forceSyncUserBalance, skipBalanceSync } from '../middleware/balanceSync';
 
 const router = Router();
 
@@ -339,7 +340,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/all', async (req: Request, res: Response) => {
+router.get('/all', skipBalanceSync, async (req: Request, res: Response) => {
   try {
     const {
       includeInactive = 'false',
@@ -1201,7 +1202,7 @@ router.post(
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/find', async (req: Request, res: Response) => {
+router.get('/find', syncUserBalanceOnRequest, async (req: Request, res: Response) => {
   const { email } = req.query;
   if (!email || typeof email !== 'string') {
     return res.status(400).json({
@@ -1222,7 +1223,13 @@ router.get('/find', async (req: Request, res: Response) => {
       });
     }
 
-    res.json(user);
+    // Convert Decimal balance to number for proper JSON serialization
+    const userResponse = {
+      ...user,
+      balance: Number(user.balance)
+    };
+
+    res.json(userResponse);
   } catch (error) {
     console.error('Error finding user by email:', error);
     res.status(500).json({
@@ -1274,7 +1281,7 @@ router.get('/find', async (req: Request, res: Response) => {
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', syncUserBalanceOnRequest, async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -1298,7 +1305,13 @@ router.get('/:id', async (req: Request, res: Response) => {
       });
     }
 
-    res.json(user);
+    // Convert Decimal balance to number for proper JSON serialization
+    const userResponse = {
+      ...user,
+      balance: Number(user.balance)
+    };
+
+    res.json(userResponse);
   } catch (error) {
     console.error('Error fetching user:', error);
     res.status(500).json({
@@ -1431,6 +1444,171 @@ router.delete('/:id', async (req: Request, res: Response) => {
       message: 'Failed to delete user',
       error: 'Internal Server Error',
       details: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/{id}/sync-balance:
+ *   post:
+ *     summary: Force sync user balance from Solana blockchain
+ *     tags: [Users]
+ *     security:
+ *       - csrf: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: User ID
+ *         example: 1
+ *     responses:
+ *       200:
+ *         description: Balance synced successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 userId:
+ *                   type: integer
+ *                 newBalance:
+ *                   type: number
+ *                 lastUpdated:
+ *                   type: string
+ *                   format: date-time
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/:id/sync-balance', forceSyncUserBalance, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = parseInt(id);
+
+    if (isNaN(userId) || userId < 1) {
+      return res.status(400).json({
+        message: 'Invalid user ID. Must be a positive integer.',
+        error: 'Bad Request',
+      });
+    }
+
+    // Get updated user data
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        firstName: true,
+        email: true,
+        balance: true,
+        updatedAt: true,
+        solanaWallet: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found',
+        error: 'Not Found',
+      });
+    }
+
+    if (!user.solanaWallet) {
+      return res.status(400).json({
+        message: 'User has no Solana wallet address',
+        error: 'Bad Request',
+      });
+    }
+
+    res.json({
+      message: 'Balance synced successfully from Solana blockchain',
+      userId: user.id,
+      newBalance: Number(user.balance),
+      lastUpdated: user.updatedAt,
+      walletAddress: user.solanaWallet
+    });
+
+  } catch (error) {
+    console.error('Error syncing user balance:', error);
+    res.status(500).json({
+      message: 'Failed to sync user balance',
+      error: 'Internal Server Error',
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/users/sync-all-balances:
+ *   post:
+ *     summary: Sync all users' balances from Solana blockchain
+ *     tags: [Users]
+ *     security:
+ *       - csrf: []
+ *     responses:
+ *       200:
+ *         description: Balance sync completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 updated:
+ *                   type: integer
+ *                 errors:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       500:
+ *         description: Internal server error
+ */
+router.post('/sync-all-balances', async (req: Request, res: Response) => {
+  try {
+    // Get all users with wallet addresses
+    const users = await prisma.user.findMany({
+      where: {
+        solanaWallet: {
+          not: null
+        }
+      },
+      select: {
+        id: true
+      }
+    });
+
+    const userIds = users.map(user => user.id);
+
+    if (userIds.length === 0) {
+      return res.json({
+        message: 'No users with wallet addresses found',
+        updated: 0,
+        errors: []
+      });
+    }
+
+    // Import the service dynamically to avoid circular dependencies
+    const { SolanaBalanceService } = await import('../services/solanaBalanceService');
+    
+    const result = await SolanaBalanceService.updateMultipleUserBalances(userIds);
+
+    res.json({
+      message: 'Balance sync completed',
+      updated: result.updated,
+      errors: result.errors
+    });
+
+  } catch (error) {
+    console.error('Error syncing all user balances:', error);
+    res.status(500).json({
+      message: 'Failed to sync all user balances',
+      error: 'Internal Server Error',
     });
   }
 });

@@ -17,7 +17,14 @@ import multisigProposalRoutes from './routes/multisigProposals';
 import treasuryVaultRoutes from './routes/treasuryVault';
 import yieldInvestmentRoutes from './routes/yieldInvestments';
 import boostedYieldRoutes from './routes/boostedYield';
+import transferStatusRoutes from './routes/transferStatus';
+import externalDepositRoutes from './routes/externalDeposits';
+import treasuryDepositRoutes from './routes/treasuryDeposits';
+import blockchainMonitoringRoutes from './routes/blockchainMonitoring';
 import { BackgroundJobs } from './services/backgroundJobs';
+import { BackgroundDepositMonitor } from './services/backgroundDepositMonitor';
+import { SolanaBalanceService } from './services/solanaBalanceService';
+import { Connection } from '@solana/web3.js';
 import { 
   helmetMiddleware, 
   rateLimiter, 
@@ -114,6 +121,10 @@ app.use('/api/multisig-proposals', verifyCSRFToken, multisigProposalRoutes);
 app.use('/api/treasury-vault', verifyCSRFToken, treasuryVaultRoutes);
 app.use('/api/yield-investments', verifyCSRFToken, yieldInvestmentRoutes);
 app.use('/api/boosted-yield', verifyCSRFToken, boostedYieldRoutes);
+app.use('/api/transfer-status', verifyCSRFToken, transferStatusRoutes);
+app.use('/api/external-deposits', verifyCSRFToken, externalDepositRoutes);
+app.use('/api/treasury-deposits', verifyCSRFToken, treasuryDepositRoutes);
+app.use('/api/blockchain-monitoring', verifyCSRFToken, blockchainMonitoringRoutes);
 
 /**
  * @swagger
@@ -220,6 +231,22 @@ app.listen(PORT, () => {
   
   // Start background jobs
   BackgroundJobs.start();
+  
+  // Initialize and start blockchain monitoring
+  const solanaConnection = new Connection(
+    process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com',
+    'confirmed'
+  );
+  BackgroundDepositMonitor.initialize(solanaConnection);
+  SolanaBalanceService.initialize(solanaConnection);
+  
+  // Start blockchain monitoring (optional - can be started manually via API)
+  if (process.env.AUTO_START_BLOCKCHAIN_MONITORING === 'true') {
+    BackgroundDepositMonitor.start();
+    console.log('🔍 Blockchain deposit monitoring started automatically');
+  } else {
+    console.log('🔍 Blockchain deposit monitoring available (start via API)');
+  }
 });
 
 console.log('✅ Server setup complete');

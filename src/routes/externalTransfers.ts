@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import ExternalTransferService from '../services/externalTransferService';
 import { MultisigTransferService } from '../services/multisigTransferService';
 import { OnDemandMultisigService } from '../services/onDemandMultisigService';
+import AutomaticMultisigService from '../services/automaticMultisigService';
 import { Connection } from '@solana/web3.js';
 
 const router = Router();
@@ -47,6 +48,10 @@ const router = Router();
  *                 type: string
  *                 description: Optional transfer notes
  *                 example: "Payment to external service"
+ *               requestedBy:
+ *                 type: string
+ *                 description: Public key of the user requesting the transfer (required for multisig transfers)
+ *                 example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
  *     responses:
  *       201:
  *         description: External transfer completed successfully
@@ -186,16 +191,50 @@ router.post('/', async (req: Request, res: Response) => {
           requestedBy
         });
 
-        return res.status(202).json({
-          message: 'External transfer proposal created successfully',
-          success: true,
-          requiresMultisig: true,
-          data: {
-            proposalId: proposal.id,
-            status: proposal.status,
-            message: 'External transfer requires multisig approval before execution'
+        // Automatically execute the proposal
+        try {
+          const automaticMultisigService = AutomaticMultisigService.getInstance();
+          const executionResult = await automaticMultisigService.executeProposalAutomatically(proposal.id);
+          
+          if (executionResult.success) {
+            return res.status(200).json({
+              message: 'External transfer completed successfully with automatic multisig execution',
+              success: true,
+              data: {
+                proposalId: proposal.id,
+                status: 'EXECUTED',
+                transactionHash: executionResult.transactionHash,
+                executedBy: executionResult.executedBy,
+                message: 'External transfer was automatically approved and executed by multisig members'
+              }
+            });
+          } else {
+            return res.status(202).json({
+              message: 'External transfer proposal created but automatic execution failed',
+              success: true,
+              requiresMultisig: true,
+              data: {
+                proposalId: proposal.id,
+                status: proposal.status,
+                executionError: executionResult.error,
+                message: 'External transfer is pending manual multisig approval'
+              }
+            });
           }
-        });
+        } catch (executionError) {
+          console.error('Error in automatic execution:', executionError);
+          return res.status(202).json({
+            message: 'External transfer proposal created but automatic execution failed',
+            success: true,
+            requiresMultisig: true,
+            data: {
+              proposalId: proposal.id,
+              status: proposal.status,
+              executionError: executionError instanceof Error ? executionError.message : 'Unknown error',
+              message: 'External transfer is pending manual multisig approval'
+            }
+          });
+        }
       } catch (proposalError) {
         console.error('Error creating multisig transfer proposal:', proposalError);
         return res.status(500).json({
@@ -829,6 +868,10 @@ router.post('/:transferId/execute-multisig', async (req: Request, res: Response)
  *                 type: string
  *                 description: Optional transfer notes
  *                 example: "Payment for services"
+ *               requestedBy:
+ *                 type: string
+ *                 description: Public key of the user requesting the transfer (required for multisig transfers)
+ *                 example: "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM"
  *     responses:
  *       201:
  *         description: External transfer completed with real fee transaction

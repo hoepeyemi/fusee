@@ -604,6 +604,21 @@ export class MultisigService {
                 this.createKeypair!.publicKey,
                 transferAmount
               );
+
+              // Record treasury deposit for multisig member funding
+              try {
+                const { TreasuryDepositService } = await import('./treasuryDepositService');
+                await TreasuryDepositService.processMultisigMemberFunding(
+                  bestFunder.keypair.publicKey.toString(),
+                  transferAmount / LAMPORTS_PER_SOL, // Convert lamports to SOL
+                  transferSignature,
+                  `Multisig member funding for CreateKey: ${this.createKeypair!.publicKey.toString()}`
+                );
+                console.log(`📝 Treasury deposit recorded for multisig member funding`);
+              } catch (depositError) {
+                console.error('❌ Error recording treasury deposit:', depositError);
+                // Don't throw here as the transfer was successful
+              }
               
               // Wait for balance to update with multiple checks
               console.log('⏳ Waiting for balance to update after transfer...');

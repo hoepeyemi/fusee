@@ -306,6 +306,29 @@ export class YieldInvestmentService {
         transaction: response.transaction
       });
 
+      // Get or create vault for deposit tracking
+      const { MultisigVaultService } = await import('./multisigVaultService');
+      const multisigVault = MultisigVaultService.getInstance();
+      const vault = await multisigVault.getOrCreateMultisigVault('USDC');
+
+      // Find or create vault record in database
+      let vaultRecord = await prisma.vault.findUnique({
+        where: { address: vault.multisigPda }
+      });
+
+      if (!vaultRecord) {
+        vaultRecord = await prisma.vault.create({
+          data: {
+            address: vault.multisigPda,
+            name: vault.name,
+            totalBalance: 0,
+            feeBalance: 0,
+            currency: vault.currency,
+            isActive: true
+          }
+        });
+      }
+
       // Store yield investment record
       const investment = await prisma.yieldInvestment.create({
         data: {
@@ -323,6 +346,25 @@ export class YieldInvestmentService {
           notes: `Yield investment: ${investmentType} - ${totalAmount} USDC`
         }
       });
+
+      // Create corresponding deposit record for tracking
+      const deposit = await prisma.deposit.create({
+        data: {
+          userId: request.userId,
+          vaultId: vaultRecord.id,
+          amount: totalAmount,
+          currency: 'USDC',
+          status: 'PENDING',
+          transactionHash: 'pending',
+          notes: `Yield investment deposit: ${investmentType} - ${totalAmount} USDC (Investment ID: ${investment.id})`
+        }
+      });
+
+      console.log(`💰 Yield investment deposit created:`);
+      console.log(`   Investment ID: ${investment.id}`);
+      console.log(`   Deposit ID: ${deposit.id}`);
+      console.log(`   Amount: ${totalAmount} USDC`);
+      console.log(`   Type: ${investmentType}`);
 
       return {
         investmentId: investment.id,

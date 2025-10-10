@@ -141,7 +141,7 @@ export class RealFeeTransactionService {
       const simulatedHash = `FEE_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       // Update treasury vault balance in database
-      await prisma.vault.update({
+      const updatedVault = await prisma.vault.update({
         where: { address: treasury.address },
         data: {
           feeBalance: {
@@ -153,8 +153,22 @@ export class RealFeeTransactionService {
         }
       });
 
+      // Create deposit record for fee collection
+      const deposit = await prisma.deposit.create({
+        data: {
+          userId: 0, // System user ID for fee collections
+          vaultId: updatedVault.id,
+          amount: feeAmount,
+          currency: currency,
+          status: 'COMPLETED',
+          transactionHash: simulatedHash,
+          notes: `Fee collection from ${fromWallet.substring(0, 8)}...`
+        }
+      });
+
       console.log(`✅ Fee transaction simulated: ${simulatedHash}`);
       console.log(`💰 Treasury vault balance updated: +${feeAmount} ${currency}`);
+      console.log(`📝 Fee deposit record created: ID ${deposit.id}`);
 
       return {
         transactionHash: simulatedHash,
@@ -225,7 +239,7 @@ export class RealFeeTransactionService {
       const simulatedHash = `MULTISIG_FEE_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
       // Update treasury vault balance in database
-      await prisma.vault.update({
+      const updatedVault = await prisma.vault.update({
         where: { address: treasury.address },
         data: {
           feeBalance: {
@@ -237,8 +251,22 @@ export class RealFeeTransactionService {
         }
       });
 
+      // Create deposit record for multisig fee collection
+      const deposit = await prisma.deposit.create({
+        data: {
+          userId: 0, // System user ID for fee collections
+          vaultId: updatedVault.id,
+          amount: feeAmount,
+          currency: currency,
+          status: 'COMPLETED',
+          transactionHash: simulatedHash,
+          notes: `Multisig fee collection from ${multisigPda.substring(0, 8)}...`
+        }
+      });
+
       console.log(`✅ Multisig fee transaction simulated: ${simulatedHash}`);
       console.log(`💰 Treasury vault balance updated: +${feeAmount} ${currency}`);
+      console.log(`📝 Multisig fee deposit record created: ID ${deposit.id}`);
 
       return {
         transactionHash: simulatedHash,

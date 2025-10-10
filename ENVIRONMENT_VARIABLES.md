@@ -22,6 +22,10 @@ RPC_URL="https://api.devnet.solana.com"
 
 # Solana network (devnet, mainnet-beta, testnet)
 SOLANA_NETWORK="devnet"
+
+# Blockchain monitoring configuration
+SOLANA_RPC_URL="https://api.devnet.solana.com"
+AUTO_START_BLOCKCHAIN_MONITORING="false"
 ```
 
 ## Lulo.fi API Configuration
@@ -40,6 +44,24 @@ LULO_PRIORITY_FEE="50000"
 - You can get your API key from your Lulo.fi project overview
 - The API key is used to generate transactions and instructions for yield investments
 - Priority fee can be adjusted based on network conditions
+
+## Blockchain Monitoring Configuration
+
+### Automatic Deposit Detection
+```bash
+# Solana RPC URL for blockchain monitoring
+SOLANA_RPC_URL="https://api.devnet.solana.com"
+
+# Auto-start blockchain monitoring on server startup (true/false)
+AUTO_START_BLOCKCHAIN_MONITORING="false"
+```
+
+**Important Notes:**
+- `SOLANA_RPC_URL` is used for querying the Solana blockchain for deposits
+- Set `AUTO_START_BLOCKCHAIN_MONITORING="true"` to automatically start monitoring on server startup
+- When disabled, monitoring can be started manually via API endpoints
+- The system monitors all user wallets for airdrops and external funding deposits
+- Monitoring runs every 5 minutes when active
 
 ## Multisig Configuration
 

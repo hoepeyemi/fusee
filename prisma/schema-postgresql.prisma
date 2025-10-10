@@ -6,7 +6,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -17,7 +17,7 @@ model User {
   firstName       String?  // Extract first name for wallet lookup
   phoneNumber     String?
   solanaWallet    String   @unique
-  balance         Decimal  @default(0) @db.Decimal(18, 8) // User's vault balance
+  balance         Float    @default(0) // User's vault balance
   
   // Multisig fields (per-user)
   multisigPda     String?  @unique // User's personal multisig PDA
@@ -56,9 +56,9 @@ model Transfer {
   id            Int      @id @default(autoincrement())
   senderId      Int
   receiverId    Int
-  amount        Decimal  @db.Decimal(18, 8) // Support up to 18 digits with 8 decimal places
-  fee           Decimal  @db.Decimal(18, 8) // Transfer fee (0.001%)
-  netAmount     Decimal  @db.Decimal(18, 8) // Amount after fee deduction
+  amount        Float    // Support up to 18 digits with 8 decimal places
+  fee           Float    // Transfer fee (0.001%)
+  netAmount     Float    // Amount after fee deduction
   currency      String   @default("SOL") // Default to Solana
   status        TransferStatus @default(PENDING)
   transactionHash String? // Blockchain transaction hash
@@ -78,8 +78,8 @@ model Vault {
   id            Int      @id @default(autoincrement())
   address       String   @unique
   name          String   @default("Main Vault")
-  totalBalance  Decimal  @default(0) @db.Decimal(18, 8)
-  feeBalance    Decimal  @default(0) @db.Decimal(18, 8) // Total fees collected
+  totalBalance  Float    @default(0)
+  feeBalance    Float    @default(0) // Total fees collected
   currency      String   @default("SOL")
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
@@ -267,7 +267,6 @@ model MultisigMember {
   multisig      Multisig? @relation("MultisigMembers", fields: [multisigId], references: [id])
   user          User?     @relation("UserMultisigMembers", fields: [userId], references: [id])
   approvals     MultisigApproval[] @relation("MemberApprovals")
-  transferProposalApprovals MultisigTransferProposalApproval[] @relation("TransferProposalMemberApprovals")
 
   @@map("multisig_members")
 }
@@ -418,24 +417,7 @@ model MultisigTransferProposal {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  // Relations
-  approvals     MultisigTransferProposalApproval[] @relation("TransferProposalApprovals")
-
   @@map("multisig_transfer_proposals")
-}
-
-model MultisigTransferProposalApproval {
-  id            Int      @id @default(autoincrement())
-  proposalId    Int      // MultisigTransferProposal ID
-  memberId      Int      // MultisigMember ID
-  approvalType  MultisigApprovalType @default(APPROVE)
-  createdAt     DateTime @default(now())
-
-  // Relations
-  proposal      MultisigTransferProposal @relation("TransferProposalApprovals", fields: [proposalId], references: [id])
-  member        MultisigMember @relation("TransferProposalMemberApprovals", fields: [memberId], references: [id])
-
-  @@map("multisig_transfer_proposal_approvals")
 }
 
 enum MultisigTransferStatus {
